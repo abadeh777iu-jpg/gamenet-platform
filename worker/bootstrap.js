@@ -1,4 +1,8 @@
 'use strict';
+// Define-proof environment marker: wrangler may rewrite `process.env.NODE_ENV`
+// expressions at build time, so production mode is published on globalThis and
+// src/config.js reads it first. Set at module load — before anything requires config.
+globalThis.__GN_ENV = 'production';
 const Database = require('better-sqlite3');
 const { expressHandler } = require('./express-fetch');
 
@@ -15,6 +19,10 @@ async function init(env){
   if(ready && ver === loadedVer) return ready;
 
   ready = (async () => {
+    // Deployment runtime is production unless explicitly overridden — must be
+    // set BEFORE src/config is required (prod gates, cookie flags, masking).
+    globalThis.__GN_ENV = env.NODE_ENV || 'production';
+    try{ process.env['NODE_ENV'] = globalThis.__GN_ENV; }catch(e){}
     if(env && env.JWT_ACCESS_SECRET) process.env.JWT_ACCESS_SECRET = env.JWT_ACCESS_SECRET;
     if(env && env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = env.JWT_REFRESH_SECRET;
     if(env && env.APP_URL) process.env.APP_URL = env.APP_URL;

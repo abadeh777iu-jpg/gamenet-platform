@@ -53,11 +53,11 @@ function renderOrders(orders){
   if(!orders.length){ el.innerHTML='<div class="empty">سفارشی نیست</div>'; return; }
   el.innerHTML = `<div style="overflow:auto"><table>
     <tr><th>شماره</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th></th></tr>
-    ${orders.map(o=>`<tr>
+      ${orders.map(o=>`<tr>
       <td>${esc(o.public_id)}</td><td>${esc(o.plan_name)}</td>
       <td>${fmtMoney(o.amount_cents)}</td>
-      <td><span class="badge ${o.status==='paid'?'badge-green':'badge-amber'}">${esc(o.status)}</span></td>
-      <td>${o.status!=='paid'?`<button class="btn btn-primary btn-sm" onclick="pay(${o.id})">پرداخت</button>`:'✅'}</td>
+      <td><span class="badge ${o.status==='paid'?'badge-green':'badge-amber'}">${esc(o.status==='paid'?'پرداخت شد':o.status==='pending'?'در انتظار تأیید':'در انتظار پرداخت')}</span></td>
+      <td>${o.status==='paid' ? '✅' : `<a class="btn btn-primary btn-sm" href="/pay?order=${o.id}">${o.status==='pending'?'پیگیری':'پرداخت'}</a>`}</td>
     </tr>`).join('')}
   </table></div>`;
 }
@@ -72,18 +72,10 @@ async function buy(planId){
     const gid = myGamenets[0].id;
     const headers = { 'Idempotency-Key': crypto.randomUUID() };
     const res = await API.request('/api/subscriptions/orders', { method:'POST', body:{ gamenet_id: gid, plan_id: planId }, headers });
-    document.getElementById('alert').innerHTML = `<div class="alert alert-info">سفارش ${esc(res.order.public_id)} ساخته شد — در حال پرداخت…</div>`;
-    await pay(res.order.id);
+    location.href = '/pay?order=' + res.order.id;
   }catch(e){
     document.getElementById('alert').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
   }
-}
-async function pay(id){
-  try{
-    await API.post(`/api/subscriptions/orders/${id}/pay`, {});
-    toast('پرداخت موفق — اشتراک فعال شد');
-    await load();
-  }catch(e){ toast(e.message,'err'); }
 }
 load().catch(e=>toast(e.message,'err'));
 </script>

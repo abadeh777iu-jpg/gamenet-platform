@@ -59,8 +59,8 @@ test('payment idempotency + subscription activation', async () => {
   const wh2 = await req(app, 'POST', '/api/payments/webhook', {
     body: { provider: 'mock', event_id: evId, type: 'payment.succeeded', data: { order_id: o1.data.order.id } }
   });
-  if(wh1.status === 200){
-    assert.equal(wh1.data.duplicate, false);
-    assert.equal(wh2.data.duplicate, true, 'duplicate webhook must be ignored');
-  }
+  assert.equal(wh1.status, 200, 'webhook reachable without auth (provider-style call)');
+  assert.equal(wh1.data.duplicate, false);
+  assert.equal(wh2.status, 200);
+  assert.equal(wh2.data.duplicate, true, 'duplicate webhook must be ignored');
 });

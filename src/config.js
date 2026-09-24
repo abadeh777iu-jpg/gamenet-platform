@@ -14,7 +14,7 @@ const crypto = require('crypto');
     }
   }catch(e){}
 })();
-const env = process.env.NODE_ENV || 'development';
+const env = (typeof globalThis !== 'undefined' && globalThis.__GN_ENV) || process.env.NODE_ENV || 'development';
 const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 module.exports = {
   env,

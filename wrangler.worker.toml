@@ -18,3 +18,7 @@ NODE_ENV = "production"
 [[kv_namespaces]]
 binding = "DB"
 id = "354d01aceaab41b48d16c87e03407a43"
+
+# wrangler rewrites process.env.NODE_ENV reads at build time — force production
+[define]
+"process.env.NODE_ENV" = "\"production\""

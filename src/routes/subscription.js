@@ -4,10 +4,11 @@ const { db } = require('../db');
 const { requireAuth, requireEmailVerified } = require('../middleware/auth');
 const { requireTenant, requireTenantOwner, isAdmin } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { createOrder, markPending, mockPay, processWebhook } = require('../services/payment');
+const { createOrder, markPending, mockPay, paymentConfig, submitManualPayment } = require('../services/payment');
 const { activeSub, activateSubscription, suspendSubscription, cancelSubscription, renewSubscription } = require('../services/subscription');
 const { rateLimit } = require('../middleware/rateLimit');
 const { audit } = require('../services/audit');
+const config = require('../config');
 const router = express.Router();
 
 router.use(requireAuth);
@@ -33,13 +34,40 @@ router.get('/orders', asyncHandler(async (req,res)=>{
   res.json({ orders: rows });
 }));
 
-/** Pay (mock provider — swap with real gateway adapter) */
+/** Pay — mock provider: DEV/TEST ONLY. Production uses manual card-to-card confirmation. */
 router.post('/orders/:id/pay', rateLimit({ max: 20 }), asyncHandler(async (req,res)=>{
+  if(config.isProd){
+    return res.status(400).json({ error:'manual_payment_required', message:'پرداخت دستی — از صفحهٔ پرداخت اقدام کنید' });
+  }
   const order = db.prepare('SELECT * FROM orders WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
   if(!order) return res.status(404).json({ error:'not_found' });
   if(order.status === 'paid') return res.json({ order, alreadyPaid:true });
   const result = mockPay(order.id);
   res.json(result);
+}));
+
+/** Payment page data: order + plan + latest payment status + card instructions. */
+router.get('/orders/:id/payment', asyncHandler(async (req,res)=>{
+  const order = db.prepare(`SELECT o.*, p.name plan_name, p.duration_days FROM orders o
+    JOIN plans p ON p.id=o.plan_id WHERE o.id=? AND o.user_id=?`).get(req.params.id, req.user.id);
+  if(!order) return res.status(404).json({ error:'not_found', message:'سفارش یافت نشد' });
+  let payment = db.prepare(`SELECT id, provider, status, amount_cents, raw_json, created_at, updated_at
+    FROM payments WHERE order_id=? ORDER BY id DESC LIMIT 1`).get(order.id) || null;
+  if(payment){
+    let raw = {}; try{ raw = JSON.parse(payment.raw_json||'{}'); }catch(e){}
+    payment = { ...payment, tracking_code: raw.tracking_code || '', submitted_at: raw.submitted_at || null, has_receipt: !!(raw.receipt) };
+    delete payment.raw_json;
+  }
+  res.json({ order, payment, card: paymentConfig() });
+}));
+
+/** Submit proof of manual transfer (tracking code + optional receipt image). */
+router.post('/orders/:id/submit-payment', rateLimit({ max: 20, windowMs: 60000 }), asyncHandler(async (req,res)=>{
+  const order = db.prepare('SELECT * FROM orders WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
+  if(!order) return res.status(404).json({ error:'not_found', message:'سفارش یافت نشد' });
+  const { tracking_code, receipt } = req.body || {};
+  const payment = submitManualPayment({ order, userId: req.user.id, trackingCode: tracking_code, receipt });
+  res.status(201).json({ ok:true, payment: { id: payment.id, status: payment.status }, message:'رسید ثبت شد — پس از تأیید مدیر اشتراک فعال می‌شود' });
 }));
 
 router.get('/gamenets/:gamenetId/subscription', requireTenant(), asyncHandler(async (req,res)=>{
@@ -57,13 +85,4 @@ router.post('/gamenets/:gamenetId/subscription/cancel', requireTenant(), require
   res.json({ ok:true });
 }));
 
-/** Webhook — no cookie auth; in prod verify provider signature (extension point). */
-router.post('/payments/webhook', rateLimit({ max: 120 }), asyncHandler(async (req,res)=>{
-  const provider = String(req.body?.provider || 'mock');
-  const eventId = String(req.body?.event_id || '');
-  const type = String(req.body?.type || '');
-  if(!eventId || !type) return res.status(400).json({ error:'invalid_event' });
-  const result = processWebhook({ provider, eventId, type, payload: req.body?.data || {} });
-  res.json({ ok:true, ...result });
-}));
 module.exports = router;

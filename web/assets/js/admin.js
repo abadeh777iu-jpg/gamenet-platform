@@ -31,15 +31,17 @@ const loaders = {
   async users(){
     const d = await API.get('/api/admin/users');
     $('s-users').innerHTML = `<div class="card"><h3>کاربران</h3><div style="overflow:auto"><table>
-      <tr><th>#</th><th>ایمیل</th><th>نام</th><th>نقش‌ها</th><th>وضعیت</th><th>عملیات</th></tr>
+      <tr><th>#</th><th>ایمیل</th><th>نام</th><th>نقش‌ها</th><th>وضعیت</th><th>ایمیل</th><th>عملیات</th></tr>
       ${d.users.map(u=>`<tr>
         <td>${u.id}</td><td>${esc(u.email)}</td><td>${esc(u.name)}</td>
         <td><span class="badge badge-purple">${esc(u.roles||'—')}</span></td>
         <td><span class="badge ${u.status==='active'?'badge-green':'badge-red'}">${esc(u.status)}</span></td>
+        <td>${u.email_verified_at ? '<span class="badge badge-green">تأیید</span>' : '<span class="badge badge-amber">در انتظار</span>'}</td>
         <td>
           ${u.status==='active'
             ? `<button class="btn btn-danger btn-sm" onclick="uStatus(${u.id},'suspended')">تعلیق</button>`
             : `<button class="btn btn-primary btn-sm" onclick="uStatus(${u.id},'active')">فعال</button>`}
+          ${u.email_verified_at ? '' : ` <button class="btn btn-secondary btn-sm" onclick="uVerify(${u.id})">تأیید ایمیل</button>`}
         </td></tr>`).join('')}
     </table></div></div>`;
   },
@@ -92,14 +94,44 @@ const loaders = {
   },
   async payments(){
     const d = await API.get('/api/admin/payments');
+    const pend = (d.payments||[]).filter(p => p.status==='pending' && p.provider==='manual');
+    const pendHtml = pend.map(p=>{
+      let raw={}; try{ raw=JSON.parse(p.raw_json||'{}'); }catch(e){}
+      const rec = raw.receipt || '';
+      return `<div class="card" style="margin-top:12px;border:1px solid #f59e0b">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
+          <div>
+            <span class="badge badge-amber">در انتظار تأیید</span>
+            <b style="margin-right:8px">${esc(p.order_public)}</b>
+            <span class="muted small">${esc(p.user_name||'')} — ${esc(p.email)}</span>
+          </div>
+          <div style="font-weight:900">${fmtMoney(p.amount_cents)}</div>
+        </div>
+        <div class="grid g3" style="margin-top:10px;gap:8px;text-align:right">
+          <div><label>پلن</label><div>${esc(p.plan_name||'—')}</div></div>
+          <div><label>کد پیگیری</label><div dir="ltr" style="text-align:left;font-weight:700">${esc(raw.tracking_code||'—')}</div></div>
+          <div><label>ارسال</label><div class="small">${esc(raw.submitted_at||p.created_at||'')}</div></div>
+        </div>
+        ${rec ? `<div style="margin-top:10px;text-align:center"><img src="${rec}" alt="رسید" style="max-width:100%;max-height:340px;border-radius:10px;border:1px solid var(--line);cursor:zoom-in" onclick="window.open(this.src,'_blank')"></div>`
+              : '<div class="muted small" style="margin-top:8px">رسید عکسی ارسال نشده — فقط کد پیگیری</div>'}
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary" onclick="confirmPay(${p.id})">✅ تأیید و فعال‌سازی اشتراک</button>
+          <button class="btn btn-danger" onclick="rejectPay(${p.id})">❌ رد رسید</button>
+        </div>
+      </div>`;
+    }).join('') || '<div class="muted small" style="margin-top:10px">رسید در انتظار تأییدی نیست ✅</div>';
+
     $('s-payments').innerHTML = `
-      <div class="card"><h3>پرداخت‌ها</h3><div style="overflow:auto"><table>
-        <tr><th>#</th><th>سفارش</th><th>کاربر</th><th>مبلغ</th><th>وضعیت</th></tr>
+      <div class="card"><h3>رسیدهای در انتظار تأیید</h3>${pendHtml}</div>
+      <div class="card" style="margin-top:14px"><h3>پرداخت‌ها</h3><div style="overflow:auto"><table>
+        <tr><th>#</th><th>سفارش</th><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>روش</th><th>وضعیت</th></tr>
         ${d.payments.map(p=>`<tr>
           <td>${p.id}</td><td>${esc(p.order_public)}</td><td>${esc(p.email)}</td>
+          <td>${esc(p.plan_name||'—')}</td>
           <td>${fmtMoney(p.amount_cents)}</td>
-          <td><span class="badge ${p.status==='succeeded'?'badge-green':'badge-amber'}">${esc(p.status)}</span></td>
-        </tr>`).join('')||'<tr><td colspan="5" class="empty">موردی نیست</td></tr>'}
+          <td class="small">${p.provider==='manual'?'کارت به کارت':esc(p.provider)}</td>
+          <td><span class="badge ${p.status==='succeeded'?'badge-green':p.status==='failed'?'badge-red':'badge-amber'}">${esc(p.status==='succeeded'?'تأیید شد':p.status==='failed'?'رد شد':'در انتظار')}</span></td>
+        </tr>`).join('')||'<tr><td colspan="7" class="empty">موردی نیست</td></tr>'}
       </table></div></div>
       <div class="card" style="margin-top:14px"><h3>فاکتورها</h3><div style="overflow:auto"><table>
         <tr><th>شماره</th><th>مبلغ</th><th>تاریخ</th></tr>
@@ -167,7 +199,19 @@ const loaders = {
   },
   async settings(){
     const d = await API.get('/api/admin/settings');
-    $('s-settings').innerHTML = `<div class="card">
+    const map = {}; (d.settings||[]).forEach(s=>map[s.key]=s.value);
+    $('s-settings').innerHTML = `
+    <div class="card">
+      <h3>💳 اطلاعات کارت به کارت (نمایش به مشتری)</h3>
+      <p class="muted small">این اطلاعات در صفحهٔ پرداخت مشتری نمایش داده می‌شود. شماره کارت عمومی است و رمز/CVV هرگز اینجا نرود.</p>
+      <div class="grid g2">
+        <div><label>به نام (نام صاحب کارت)</label><input id="c-name" value="${esc(map.cardholder_name||'')}" placeholder="مثال: علی رضایی"></div>
+        <div><label>شماره کارت</label><input id="c-no" dir="ltr" style="text-align:left" value="${esc(map.card_number||'')}" placeholder="6219-8610-XXXX-XXXX" maxlength="30"></div>
+        <div><label>بانک (اختیاری)</label><input id="c-bank" value="${esc(map.card_bank||'')}" placeholder="مثال: بانک سامان"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveCard()">ذخیره اطلاعات کارت</button>
+    </div>
+    <div class="card" style="margin-top:14px">
       <h3>تنظیمات سیستم</h3>
       <div class="grid g2">
         <div><label>کلید</label><input id="set-key" placeholder="maintenance_mode"></div>
@@ -221,6 +265,38 @@ async function saveSetting(){
     toast('ذخیره شد'); loaders.settings();
   }catch(e){ toast(e.message,'err'); }
 }
+async function saveCard(){
+  const no = $('c-no').value.trim();
+  if(no && !/^[0-9\- ]{10,25}$/.test(no)){ toast('شماره کارت فقط رقم و خط تیره/فاصله', 'err'); return; }
+  try{
+    await Promise.all([
+      API.put('/api/admin/settings',{key:'cardholder_name',value:$('c-name').value.trim()}),
+      API.put('/api/admin/settings',{key:'card_number',value:no}),
+      API.put('/api/admin/settings',{key:'card_bank',value:$('c-bank').value.trim()}),
+    ]);
+    toast('اطلاعات کارت ذخیره شد'); loaders.settings();
+  }catch(e){ toast(e.message,'err'); }
+}
+async function confirmPay(id){
+  if(!confirm('پرداخت '+id+' تأیید شود؟ اشتراک و لایسنس بلافاصله فعال می‌شود.')) return;
+  try{
+    const r = await API.post('/api/admin/payments/'+id+'/confirm',{});
+    toast(r.alreadyConfirmed ? 'قبلاً تأیید شده بود' : 'تأیید شد — اشتراک فعال شد ✅');
+    loaders.payments();
+  }catch(e){ toast(e.message,'err'); }
+}
+async function rejectPay(id){
+  const reason = prompt('دلیل رد رسید (برای مشتری نمایش داده می‌شود):');
+  if(reason === null) return;
+  try{
+    await API.post('/api/admin/payments/'+id+'/reject',{reason});
+    toast('رسید رد شد'); loaders.payments();
+  }catch(e){ toast(e.message,'err'); }
+}
+async function uVerify(id){
+  try{ await API.post('/api/admin/users/'+id+'/verify-email',{}); toast('ایمیل تأیید شد'); loaders.users(); }
+  catch(e){ toast(e.message,'err'); }
+}
 async function openTicketAdmin(id){
   try{
     const d = await API.get('/api/tickets/'+id);
@@ -245,7 +321,7 @@ async function replyAdm(id,resolve){
     openTicketAdmin(id); loaders.tickets();
   }catch(e){ toast(e.message,'err'); }
 }
-Object.assign(window,{uStatus,gStatus,subAct,licSet,createBackup,pruneBackup,recalc,saveSetting,openTicketAdmin,replyAdm});
+Object.assign(window,{uStatus,gStatus,subAct,licSet,createBackup,pruneBackup,recalc,saveSetting,saveCard,confirmPay,rejectPay,uVerify,openTicketAdmin,replyAdm});
 
 (async()=>{
   user = await requireAuth(['super_admin','admin']);

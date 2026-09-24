@@ -116,11 +116,33 @@ router.post('/licenses/:id/status', asyncHandler(async (req,res)=>{
 
 router.get('/payments', (req,res)=>{
   res.json({ payments: db.prepare(`
-    SELECT p.*, o.public_id order_public, o.user_id, u.email FROM payments p
-    JOIN orders o ON o.id=p.order_id JOIN users u ON u.id=o.user_id
-    ORDER BY p.id DESC LIMIT 200`).all(),
+    SELECT p.*, o.public_id order_public, o.user_id, o.status order_status, o.gamenet_id,
+           u.email, u.name user_name, pl.name plan_name
+    FROM payments p
+    JOIN orders o ON o.id=p.order_id JOIN users u ON u.id=o.user_id JOIN plans pl ON pl.id=o.plan_id
+    ORDER BY (p.status='pending') DESC, p.id DESC LIMIT 300`).all(),
     invoices: db.prepare(`SELECT * FROM invoices ORDER BY id DESC LIMIT 100`).all() });
 });
+
+/** Admin confirms a card-to-card payment → order paid + subscription/license activated. */
+router.post('/payments/:id/confirm', asyncHandler(async (req,res)=>{
+  const r = require('../services/payment').confirmManualPayment(Number(req.params.id), req.user);
+  res.json({ ok:true, ...r });
+}));
+/** Admin rejects a submission → customer may resubmit. */
+router.post('/payments/:id/reject', asyncHandler(async (req,res)=>{
+  const r = require('../services/payment').rejectManualPayment(Number(req.params.id), req.user, req.body?.reason);
+  res.json({ ok:true, ...r });
+}));
+/** Manually verify a user's email (customer support flow). */
+router.post('/users/:id/verify-email', asyncHandler(async (req,res)=>{
+  const uid = Number(req.params.id);
+  const u = db.prepare('SELECT id FROM users WHERE id=?').get(uid);
+  if(!u) return res.status(404).json({ error:'not_found' });
+  db.prepare('UPDATE users SET email_verified_at=COALESCE(email_verified_at, datetime(\'now\')) WHERE id=?').run(uid);
+  require('../services/audit').audit({ actorUserId:req.user.id, actorRole:req.user.roles.join(','), action:'admin.verify_email', entity:'user', entityId:uid, ip:req.ip });
+  res.json({ ok:true });
+}));
 
 router.get('/tickets', (req,res)=>{
   res.json({ tickets: listTickets({ limit: 100, status: req.query.status || null }) });

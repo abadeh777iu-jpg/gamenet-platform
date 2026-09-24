@@ -70,7 +70,7 @@ function csrfIssue(req, res, next){
 function csrfProtect(req, res, next){
   if(['GET','HEAD','OPTIONS'].includes(req.method)) return next();
   // allow webhook endpoints (signed by provider, no cookie auth)
-  if(req.path.startsWith('/api/payments/webhook')) return next();
+  if(req.path.startsWith('/api/payments/webhook') || req.path.startsWith('/api/subscriptions/payments/webhook')) return next();
   // Header-based requests (Authorization) cannot be forged cross-site: custom
   // headers require a CORS preflight that only allowlisted origins pass.
   if(req.get('authorization')) return next();

@@ -27,6 +27,7 @@ let sqlDb = null;
 let persistHook = null;
 let dirty = false;
 let initPromise = null;
+let txDepth = 0; // connection-level transaction nesting depth
 
 function b64encode(bytes){
   let bin = '';
@@ -169,19 +170,21 @@ class Database {
   }
   transaction(fn){
     const self = this;
-    let depth = 0;
+    // txDepth is CONNECTION-level (module scope): nested tx() calls from
+    // different service functions share one SQLite connection and must use
+    // savepoints, otherwise SQLite throws "cannot start a transaction within a transaction".
     return function(...args){
       const savepoint = 'sp_' + (Math.random().toString(36).slice(2,10));
-      if(depth === 0){
+      if(txDepth === 0){
         sqlDb.run('BEGIN');
       } else {
         sqlDb.run('SAVEPOINT ' + savepoint);
       }
-      depth++;
+      txDepth++;
       try{
         const r = fn.apply(self, args);
-        depth--;
-        if(depth === 0){
+        txDepth--;
+        if(txDepth === 0){
           sqlDb.run('COMMIT');
         } else {
           sqlDb.run('RELEASE ' + savepoint);
@@ -189,9 +192,9 @@ class Database {
         dirty = true;
         return r;
       } catch(e){
-        depth--;
+        txDepth--;
         try{
-          if(depth === 0){
+          if(txDepth === 0){
             sqlDb.run('ROLLBACK');
           } else {
             sqlDb.run('ROLLBACK TO ' + savepoint);

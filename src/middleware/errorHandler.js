@@ -8,7 +8,7 @@ function errorHandler(err, req, res, next){
   const status = err.status || 500;
   const payload = {
     error: err.code || (status===500 ? 'internal_error' : 'error'),
-    message: status === 500 && config.isProd ? 'خطای داخلی سرور' : (err.message || 'خطا'),
+    message: status === 500 && config.isProd ? 'خطای داخلی سرور' : (err.publicMessage || err.message || 'خطا'),
   };
   if(status === 500){
     console.error('[error]', req.method, req.originalUrl, err);

@@ -34,8 +34,14 @@ router.post('/register', rateLimit({ max: 10, windowMs: 60000 }), asyncHandler(a
   const emailNorm = String(email).toLowerCase();
   const exists = db.prepare('SELECT id FROM users WHERE email=?').get(emailNorm);
   if(exists) return res.status(409).json({ error:'email_exists', message:'این ایمیل قبلاً ثبت شده' });
-  const r = db.prepare(`INSERT INTO users(email,password_hash,name) VALUES(?,?,?)`)
-    .run(emailNorm, hashPassword(password), String(name||'').slice(0,80));
+  // Without an SMTP provider no verification mail can ever be delivered —
+  // auto-verify so customers are never blocked; with SMTP the strict flow applies.
+  const autoVerify = !config.email.smtpUrl;
+  const r = autoVerify
+    ? db.prepare(`INSERT INTO users(email,password_hash,name,email_verified_at) VALUES(?,?,?,datetime('now'))`)
+        .run(emailNorm, hashPassword(password), String(name||'').slice(0,80))
+    : db.prepare(`INSERT INTO users(email,password_hash,name) VALUES(?,?,?)`)
+        .run(emailNorm, hashPassword(password), String(name||'').slice(0,80));
   const uid = r.lastInsertRowid;
   // verify token
   const vt = randomToken(32);
