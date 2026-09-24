@@ -1,39 +1,27 @@
 # GameNet Platform
 
-سیستم مدیریت چندمستأجره (Multi-Tenant) گیم‌نت — production-ready.
+سیستم مدیریت چندمستأجره گیم‌نت — production-ready.
 
 ## اجرا
-
 ```bash
 npm install
-cp .env.example .env   # سپس مقادیر امن بسازید
 npm run migrate && npm run seed
-npm start              # http://0.0.0.0:3000
+npm start
 ```
+پیش‌فرض: `http://localhost:3000`
+
+- کاربر ادمین seed: `admin@gamenet.local` / `Admin@12345` (در production عوض کنید)
+- صفحات: `/` معرفی، `/plans` اشتراک، `/login` ورود، `/app` پنل گیم‌نت، `/admin` پنل مدیر اصلی
 
 ## تست
-
 ```bash
 npm test
 ```
 
-## ساختار
-
-- `src/routes` — HTTP layer فقط
-- `src/services` — business logic (پرداخت، اشتراک، AI tools، storage…)
-- `src/middleware` — auth، RBAC، tenant isolation، CSRF، rate limit
-- `src/db` — schema + migration + seed
-- `web/` — UI فارسی RTL dark
-- `tests/` — unit + integration + tenant isolation + payment idempotency + AI permission
-
-## اکانت پیش‌فرض seed
-
-- `admin@gamenet.local` / `Admin@12345` — **در production حتماً عوض کنید**
-
-## نکات امنیتی
-
-- رمزها فقط env؛ هیچ secret در source
-- scrypt password hashing
-- Cookie JWT HttpOnly + CSRF double-submit
-- Isolation چندمستأجره در middleware و AI tool layer
-- Audit log برای عملیات حساس
+## معماری
+- Express + SQLite (WAL) + job scheduler درون‌برنامه‌ای
+- JWT در Cookie HttpOnly + CSRF double-submit + rate limit
+- ایزولیشن مستأجر در middleware و Tool layer هوش مصنوعی
+- پرداخت idempotent (کلید سفارش + یکتایی webhook)
+- بکاپ خودکار VACUUM INTO با retention ۱۴ نسخه
+- بدون هیچ secret در سورсе — همه از `.env`
