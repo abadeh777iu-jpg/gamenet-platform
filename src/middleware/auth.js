@@ -13,6 +13,23 @@ function loadUser(userId){
 }
 function attachUser(req, res, next){
   req.user = null;
+  req.authViaBearer = false;
+  // Authorization: Bearer <access> — used by the cross-origin frontend where
+  // cookies are unavailable (Safari blocks third-party cookies). When this
+  // header is present it is authoritative: a missing/expired token does NOT
+  // fall back to cookies (prevents mixed-session confusion).
+  const authz = req.get('authorization');
+  if(authz){
+    const m = /^Bearer\s+(.+)$/i.exec(authz.trim());
+    if(m){
+      const p = verifyAccess(m[1]);
+      if(p){
+        const u = loadUser(p.sub);
+        if(u){ req.user = u; req.authViaBearer = true; }
+      }
+    }
+    return next();
+  }
   const token = req.cookies && req.cookies.gn_at;
   if(token){
     const p = verifyAccess(token);

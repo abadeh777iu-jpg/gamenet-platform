@@ -1,0 +1,1 @@
+module.exports = { createHook(){ return { enable(){ return this; }, disable(){ return this; } }; }, AsyncLocalStorage: class { getStore(){ return undefined; } run(s, fn, ...a){ return fn(...a); } enterWith(){} } };

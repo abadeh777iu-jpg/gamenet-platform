@@ -24,17 +24,18 @@ function createSession(res, user){
   db.prepare(`INSERT INTO auth_sessions(id,user_id,refresh_hash,expires_at) VALUES(?,?,?,?)`)
     .run(sid, user.id, sha256(refresh), expires);
   setAuthCookies(res, { access, refresh });
-  return { sid };
+  return { sid, access, refresh };
 }
 
 router.post('/register', rateLimit({ max: 10, windowMs: 60000 }), asyncHandler(async (req,res)=>{
   const { email, password, name } = req.body || {};
   if(!email || !EMAIL_RE.test(email)) return res.status(400).json({ error:'invalid_email', message:'ایمیل معتبر نیست' });
   if(!password || password.length < 8) return res.status(400).json({ error:'weak_password', message:'رمز باید حداقل ۸ کاراکتر باشد' });
-  const exists = db.prepare('SELECT id FROM users WHERE email=?').get(email);
+  const emailNorm = String(email).toLowerCase();
+  const exists = db.prepare('SELECT id FROM users WHERE email=?').get(emailNorm);
   if(exists) return res.status(409).json({ error:'email_exists', message:'این ایمیل قبلاً ثبت شده' });
   const r = db.prepare(`INSERT INTO users(email,password_hash,name) VALUES(?,?,?)`)
-    .run(email, hashPassword(password), String(name||'').slice(0,80));
+    .run(emailNorm, hashPassword(password), String(name||'').slice(0,80));
   const uid = r.lastInsertRowid;
   // verify token
   const vt = randomToken(32);
@@ -44,8 +45,8 @@ router.post('/register', rateLimit({ max: 10, windowMs: 60000 }), asyncHandler(a
   sendEmail({ to: email, subject: 'تأیید ایمیل — GameNet Platform', body: `کد/لینک تأیید: ${config.appUrl}/verify?token=${vt}` });
   audit({ actorUserId: uid, actorRole:'customer', action:'auth.register', entity:'user', entityId: uid, ip: req.ip });
   const user = loadUser(uid);
-  createSession(res, user);
-  res.status(201).json({ ok:true, user: publicUser(user), verify_token_dev: config.isProd ? undefined : vt });
+  const sess = createSession(res, user);
+  res.status(201).json({ ok:true, user: publicUser(user), access: sess.access, refresh: sess.refresh, verify_token_dev: config.isProd ? undefined : vt });
 }));
 
 function publicUser(u){
@@ -62,15 +63,15 @@ router.post('/login', rateLimit({ max: 15, windowMs: 60000, keyFn: r => r.ip + '
   }
   if(u.status !== 'active') return res.status(403).json({ error:'account_suspended', message:'حساب معلق است' });
   const user = loadUser(u.id);
-  createSession(res, user);
+  const sess = createSession(res, user);
   db.prepare(`UPDATE auth_sessions SET user_agent=?, ip=? WHERE user_id=? AND revoked_at IS NULL AND id=(SELECT MAX(id) FROM auth_sessions WHERE user_id=?)`)
     .run(String(req.get('user-agent')||'').slice(0,200), req.ip, u.id, u.id);
   audit({ actorUserId: u.id, actorRole: user.roles.join(','), action:'auth.login', entity:'user', entityId: u.id, ip: req.ip });
-  res.json({ ok:true, user: publicUser(user) });
+  res.json({ ok:true, user: publicUser(user), access: sess.access, refresh: sess.refresh });
 }));
 
 router.post('/refresh', rateLimit({ max: 60 }), asyncHandler(async (req,res)=>{
-  const rt = req.cookies && req.cookies.gn_rt;
+  const rt = (req.body && req.body.refresh_token) || (req.cookies && req.cookies.gn_rt);
   if(!rt) return res.status(401).json({ error:'no_refresh' });
   const p = verifyRefresh(rt);
   if(!p || !p.sid) return res.status(401).json({ error:'bad_refresh' });
@@ -81,12 +82,13 @@ router.post('/refresh', rateLimit({ max: 60 }), asyncHandler(async (req,res)=>{
   // rotate
   const newRefresh = signRefresh(user, sess.id);
   db.prepare(`UPDATE auth_sessions SET refresh_hash=?, last_seen_at=datetime('now') WHERE id=?`).run(sha256(newRefresh), sess.id);
-  setAuthCookies(res, { access: signAccess(user), refresh: newRefresh });
-  res.json({ ok:true, user: publicUser(user) });
+  const access = signAccess(user);
+  setAuthCookies(res, { access, refresh: newRefresh });
+  res.json({ ok:true, user: publicUser(user), access, refresh: newRefresh });
 }));
 
 router.post('/logout', requireAuth, asyncHandler(async (req,res)=>{
-  const rt = req.cookies && req.cookies.gn_rt;
+  const rt = (req.body && req.body.refresh_token) || (req.cookies && req.cookies.gn_rt);
   if(rt){
     const p = verifyRefresh(rt);
     if(p && p.sid) db.prepare(`UPDATE auth_sessions SET revoked_at=datetime('now') WHERE id=?`).run(p.sid);
@@ -177,8 +179,8 @@ router.post('/google', rateLimit({ max: 10 }), asyncHandler(async (req,res)=>{
   }
   const user = loadUser(u.id);
   if(user.status !== 'active') return res.status(403).json({ error:'account_suspended' });
-  createSession(res, user);
-  res.json({ ok:true, user: publicUser(user) });
+  const sess = createSession(res, user);
+  res.json({ ok:true, user: publicUser(user), access: sess.access, refresh: sess.refresh });
 }));
 
 module.exports = router;

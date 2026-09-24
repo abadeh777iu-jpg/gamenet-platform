@@ -22,9 +22,12 @@
     <label>تکرار رمز</label><input id="password2" type="password" minlength="8">
     <button id="btn" class="btn btn-primary" style="width:100%;margin-top:18px">ثبت‌نام</button>
     <p class="muted" style="margin-top:14px">حساب دارید؟ <a href="/login">ورود</a></p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+    <div id="gsi" style="width:100%;display:flex;justify-content:center;min-height:40px"></div>
   </div>
 </div>
-<script src="/assets/js/core.js"></script>
+<script src="/assets/js/config.js"></script>
+  <script src="/assets/js/core.js"></script>
 <script>
 document.getElementById('btn').onclick = async ()=>{
   document.getElementById('alert').innerHTML='';
@@ -44,5 +47,33 @@ document.getElementById('btn').onclick = async ()=>{
     btn.disabled=false;
   }
 };
+/* Google Sign-In (GIS) — rendered only when GOOGLE_CLIENT_ID is configured in config.js */
+(function(){
+  const CID = (window.GN_CONFIG && GN_CONFIG.GOOGLE_CLIENT_ID) || '';
+  const box = document.getElementById('gsi');
+  if(!CID || !box){ if(box) box.innerHTML = '<span class="muted" style="font-size:12px">ورود با گوگل به‌زودی فعال می‌شود</span>'; return; }
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.defer = true;
+  s.onload = function(){
+    try{
+      google.accounts.id.initialize({
+        client_id: CID,
+        callback: async (res)=>{
+          document.getElementById('alert').innerHTML = '';
+          try{
+            await API.post('/api/auth/google', { credential: res.credential });
+            toast('حساب ساخته شد');
+            location.href = '/app/';
+          }catch(e){
+            document.getElementById('alert').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
+          }
+        }
+      });
+      google.accounts.id.renderButton(box, { theme:'outline', size:'large', text:'continue_with', locale:'fa', shape:'rectangular', width: 280 });
+    }catch(e){ box.innerHTML = '<span class="muted" style="font-size:12px">خطا در بارگذاری ورود گوگل — صفحه را تازه‌سازی کنید</span>'; }
+  };
+  s.onerror = function(){ box.innerHTML = '<span class="muted" style="font-size:12px">عدم دسترسی به سرویس گوگل — از رمز عبور استفاده کنید</span>'; };
+  document.head.appendChild(s);
+})();
 </script>
 </body></html>

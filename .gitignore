@@ -9,3 +9,7 @@ tests/.test.db*
 tests/.data-test/
 *.log
 .DS_Store
+.wrangler/
+.test.db*
+web/_worker.js
+worker/main.mjs

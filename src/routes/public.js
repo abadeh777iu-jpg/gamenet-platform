@@ -10,7 +10,7 @@ router.get('/plans', (req,res)=>{
     FROM plans WHERE active=1 ORDER BY price_cents ASC`).all();
   res.json({ plans: plans.map(p => ({ ...p, features: JSON.parse(p.features_json||'[]') })) });
 });
-router.get('/health', (req,res)=> res.json({ ok:true, uptime: process.uptime(), ts: Date.now() }));
+router.get('/health', (req,res)=> res.json({ ok:true, uptime: process.uptime(), ts: Date.now(), csrf: req.csrfToken }));
 router.post('/license/check', (req,res)=>{
   const { key } = req.body || {};
   if(!key) return res.status(400).json({ error:'key_required' });

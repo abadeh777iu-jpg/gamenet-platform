@@ -1,0 +1,1 @@
+module.exports = { lookup(h,o,cb){ (typeof o==='function'?o:cb)(null,'127.0.0.1',4); }, resolve(){ const cb=arguments[arguments.length-1]; if(typeof cb==='function') cb(null,[]); }, createServer(){ throw new Error('n/a'); } };

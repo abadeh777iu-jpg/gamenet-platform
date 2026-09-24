@@ -25,10 +25,11 @@
     </div>
     <p class="muted" style="margin-top:14px"><a href="/forgot">فراموشی رمز</a> · <a href="/register">ساخت حساب</a></p>
     <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
-    <button id="gbtn" class="btn btn-secondary" style="width:100%" disabled>Google Login (پیکربندی‌نشده)</button>
+    <div id="gsi" style="width:100%;display:flex;justify-content:center;margin-top:4px;min-height:40px"></div>
   </div>
 </div>
-<script src="/assets/js/core.js"></script>
+<script src="/assets/js/config.js"></script>
+  <script src="/assets/js/core.js"></script>
 <script>
 const alertBox = document.getElementById('alert');
 function show(msg, cls='alert-error'){ alertBox.innerHTML = `<div class="alert ${cls}">${esc(msg)}</div>`; }
@@ -46,5 +47,32 @@ document.getElementById('btn').onclick = async ()=>{
   }catch(e){ show(e.message); btn.disabled=false; btn.classList.remove('loading'); }
 };
 API.get('/api/auth/me').then(u=>{ if(u) location.href='/app/'; }).catch(()=>{});
+/* Google Sign-In (GIS) — rendered only when GOOGLE_CLIENT_ID is configured in config.js */
+(function(){
+  const CID = (window.GN_CONFIG && GN_CONFIG.GOOGLE_CLIENT_ID) || '';
+  const box = document.getElementById('gsi');
+  if(!CID || !box){ if(box) box.innerHTML = '<span class="muted" style="font-size:12px">ورود با گوگل به‌زودی فعال می‌شود</span>'; return; }
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.defer = true;
+  s.onload = function(){
+    try{
+      google.accounts.id.initialize({
+        client_id: CID,
+        callback: async (res)=>{
+          alertBox.innerHTML = '';
+          try{
+            const r = await API.post('/api/auth/google', { credential: res.credential });
+            toast('خوش آمدید');
+            const next = qs('next');
+            location.href = next || (r.user.roles.includes('super_admin')||r.user.roles.includes('admin') ? '/admin/' : '/app/');
+          }catch(e){ show(e.message); }
+        }
+      });
+      google.accounts.id.renderButton(box, { theme:'outline', size:'large', text:'continue_with', locale:'fa', shape:'rectangular', width: 280 });
+    }catch(e){ box.innerHTML = '<span class="muted" style="font-size:12px">خطا در بارگذاری ورود گوگل — صفحه را تازه‌سازی کنید</span>'; }
+  };
+  s.onerror = function(){ box.innerHTML = '<span class="muted" style="font-size:12px">عدم دسترسی به سرویس گوگل — از رمز عبور استفاده کنید</span>'; };
+  document.head.appendChild(s);
+})();
 </script>
 </body></html>

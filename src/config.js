@@ -32,6 +32,9 @@ module.exports = {
     refreshTtl: Number(process.env.JWT_REFRESH_TTL || 1209600),
   },
   cookieSecure: process.env.COOKIE_SECURE === '1' || env === 'production',
+  cookieSameSite: process.env.COOKIE_SAMESITE || 'lax',
+  corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:3000,https://abadeh777iu-jpg.github.io,https://gamenet-platform.pages.dev')
+    .split(',').map(s => s.trim()).filter(Boolean),
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   ai: {
     apiUrl: process.env.AI_API_URL || '',
