@@ -1,0 +1,1 @@
+module.exports = { platform: () => 'linux', arch: () => 'wasm32', tmpdir: () => '/tmp', EOL: '\n', cpus: () => [], totalmem: () => 0, freemem: () => 0, hostname: () => 'cf', networkInterfaces: () => ({}) };

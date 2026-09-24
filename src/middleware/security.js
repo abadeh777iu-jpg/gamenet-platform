@@ -1,5 +1,6 @@
 'use strict';
-const helmet = require('helmet');
+const __helmetMod = require('helmet');
+const helmet = typeof __helmetMod === 'function' ? __helmetMod : (__helmetMod && __helmetMod.default) || __helmetMod;
 const config = require('../config');
 const { sha256, randomToken } = require('../services/ids');
 

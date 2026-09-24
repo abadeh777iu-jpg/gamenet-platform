@@ -31,10 +31,11 @@ router.post('/register', rateLimit({ max: 10, windowMs: 60000 }), asyncHandler(a
   const { email, password, name } = req.body || {};
   if(!email || !EMAIL_RE.test(email)) return res.status(400).json({ error:'invalid_email', message:'ایمیل معتبر نیست' });
   if(!password || password.length < 8) return res.status(400).json({ error:'weak_password', message:'رمز باید حداقل ۸ کاراکتر باشد' });
-  const exists = db.prepare('SELECT id FROM users WHERE email=?').get(email);
+  const emailNorm = String(email).toLowerCase();
+  const exists = db.prepare('SELECT id FROM users WHERE email=?').get(emailNorm);
   if(exists) return res.status(409).json({ error:'email_exists', message:'این ایمیل قبلاً ثبت شده' });
   const r = db.prepare(`INSERT INTO users(email,password_hash,name) VALUES(?,?,?)`)
-    .run(email, hashPassword(password), String(name||'').slice(0,80));
+    .run(emailNorm, hashPassword(password), String(name||'').slice(0,80));
   const uid = r.lastInsertRowid;
   // verify token
   const vt = randomToken(32);

@@ -29,8 +29,11 @@ app.use('/api/ai', require('./routes/ai'));
 app.use('/api/notifications', require('./routes/notification'));
 app.use('/api/admin', require('./routes/admin'));
 
+// Unmatched /api/* → 404 before static (avoids send/fs on API paths)
+app.use('/api', notFound);
+
 // Static frontend
-const webDir = path.join(__dirname, '..', 'web');
+const webDir = path.join((typeof __dirname !== 'undefined' && __dirname) || '.', '..', 'web');
 app.use(express.static(webDir, { extensions: ['html'], index: 'index.html' }));
 
 // SPA-ish fallback for known app roots
@@ -39,7 +42,6 @@ app.get(['/app','/app/','/admin','/admin/','/plans','/login','/register','/forgo
   res.sendFile(path.join(webDir, page), err => err ? next() : undefined);
 });
 
-app.use('/api', notFound);
 app.use(notFound);
 app.use(errorHandler);
 module.exports = app;

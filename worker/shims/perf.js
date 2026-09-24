@@ -1,0 +1,1 @@
+module.exports = { performance: globalThis.performance || { now: () => Date.now() }, monitorEventLoopDelay(){ return { enable(){}, disable(){}, reset(){}, histogram:{} }; }, PerformanceObserver: class { observe(){} disconnect(){} } };

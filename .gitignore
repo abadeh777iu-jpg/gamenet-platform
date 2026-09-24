@@ -9,3 +9,5 @@ tests/.test.db*
 tests/.data-test/
 *.log
 .DS_Store
+.wrangler/
+.test.db*

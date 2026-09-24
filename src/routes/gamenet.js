@@ -129,17 +129,31 @@ router.get('/:gamenetId/dashboard', requireTenant(), asyncHandler(async (req,res
 router.post('/:gamenetId/files', requireTenant(), upload.single('file'), asyncHandler(async (req,res)=>{
   if(!req.file) return res.status(400).json({ error:'file_required' });
   try{
+    // Buffer mode (Workers): persist bytes in KV if env available; else keep path from disk multer
+    let rel;
+    if(req.file.buffer && (!req.file.path || req.file.path === '')){
+      const key = 'files/' + req.gamenet.id + '/' + req.file.filename;
+      const env = req.env || (req.app && req.app.get && req.app.get('env_obj'));
+      if(env && env.DB && env.DB.put){
+        await env.DB.put(key, req.file.buffer, { expirationTtl: 60*60*24*365 });
+      }
+      rel = key;
+    } else {
+      rel = path.join(String(req.gamenet.id), req.file.filename || path.basename(req.file.path||''));
+    }
     const f = registerFile({
       gamenetId: req.gamenet.id,
       uploaderUserId: req.user.id,
-      filePath: path.join(String(req.gamenet.id), req.file.filename),
+      filePath: String(rel).split('\\').join('/'),
       originalName: req.file.originalname,
       sizeBytes: req.file.size,
       mime: req.file.mimetype,
     });
     res.status(201).json({ file: f });
   }catch(e){
-    try{ fs.unlinkSync(req.file.path); }catch(_){}
+    if(req.file && req.file.path){
+      try{ fs.unlinkSync(req.file.path); }catch(_){}
+    }
     res.status(e.status||500).json({ error: e.message });
   }
 }));

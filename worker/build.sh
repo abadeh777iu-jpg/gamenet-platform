@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+BANNER='import { createRequire as __cr } from "node:module"; const __base = __cr("file:///index.js"); const __mc = Object.create(null); const require = function(id){ if(id==="buffer"||id==="node:buffer"){ let m=__mc[id]; if(!m){ const real=__base(id==="buffer"?"node:buffer":id); m=Object.assign(Object.create(Object.prototype), real); if(typeof m.Buffer==="undefined"&&typeof Buffer!=="undefined") m.Buffer=Buffer; if(typeof m.hasOwnProperty!=="function") m.hasOwnProperty=Object.prototype.hasOwnProperty; __mc.buffer=m; __mc["node:buffer"]=m; __mc[id]=m; } return m; } return __base(id); };'
+npx esbuild worker/pages-entry.js \
+  --bundle \
+  --format=esm \
+  --platform=node \
+  --outfile=web/_worker.js \
+  --alias:better-sqlite3=./worker/shims/better-sqlite3.js \
+  --alias:fs=./worker/shims/fs.js \
+  --alias:path=./worker/shims/path.js \
+  --alias:multer=./worker/shims/multer.js \
+  --alias:os=./worker/shims/os.js \
+  --alias:http=./worker/shims/http.js \
+  --alias:https=./worker/shims/http.js \
+  --alias:net=./worker/shims/http.js \
+  --alias:tls=./worker/shims/http.js \
+  --alias:helmet=./node_modules/helmet/index.cjs \
+  --alias:child_process=./worker/shims/child_process.js \
+  --alias:depd=./worker/shims/depd.js \
+  --alias:tty=./worker/shims/tty.js \
+  --alias:node:tty=./worker/shims/tty.js \
+  --alias:stream=./worker/shims/stream.js \
+  --alias:node:stream=./worker/shims/stream.js \
+  --alias:dns=./worker/shims/dns.js \
+  --alias:node:dns=./worker/shims/dns.js \
+  --alias:dgram=./worker/shims/dns.js \
+  --alias:node:dgram=./worker/shims/dns.js \
+  --alias:cluster=./worker/shims/child_process.js \
+  --alias:node:cluster=./worker/shims/child_process.js \
+  --alias:worker_threads=./worker/shims/worker_threads.js \
+  --alias:node:worker_threads=./worker/shims/worker_threads.js \
+  --alias:v8=./worker/shims/v8.js \
+  --alias:node:v8=./worker/shims/v8.js \
+  --alias:vm=./worker/shims/v8.js \
+  --alias:node:vm=./worker/shims/v8.js \
+  --alias:inspector=./worker/shims/v8.js \
+  --alias:node:inspector=./worker/shims/v8.js \
+  --alias:perf_hooks=./worker/shims/perf.js \
+  --alias:node:perf_hooks=./worker/shims/perf.js \
+  --alias:async_hooks=./worker/shims/async_hooks.js \
+  --alias:node:async_hooks=./worker/shims/async_hooks.js \
+  --alias:domain=./worker/shims/domain.js \
+  --alias:node:domain=./worker/shims/domain.js \
+  --alias:constants=./worker/shims/constants.js \
+  --alias:node:constants=./worker/shims/constants.js \
+  --external:node:* \
+  --external:crypto \
+  --external:events \
+  --external:util \
+  --external:buffer \
+  --external:process \
+  --external:url \
+  --external:string_decoder \
+  --external:querystring \
+  --external:timers \
+  --external:assert \
+  --external:zlib \
+  --external:module \
+  --external:node:module \
+  --loader:.sql=text \
+  --banner:js="$BANNER" \
+  --conditions=worker,browser,import,default
+echo "BUILD_OK $(wc -c < web/_worker.js)"
