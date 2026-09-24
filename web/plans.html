@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>خرید اشتراک — GameNet Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/">🎮 <span>GameNet Platform</span></a>
+  <div class="spacer"></div>
+  <a href="/login">ورود</a><a href="/app/" class="btn btn-primary btn-sm">پنل من</a>
+</div></nav>
+<div class="container">
+  <h1 style="margin-top:20px">پلن‌های اشتراک</h1>
+  <p class="muted">کاملاً جدا از پنل گیم‌نت و پنل مدیریت — مسیر دسترسی و طراحی اختصاصی</p>
+  <div id="alert"></div>
+  <div id="plans" class="grid g3" style="margin-top:18px"></div>
+  <div class="card" style="margin-top:20px">
+    <h3>سفارش‌های من</h3>
+    <div id="orders" class="empty">ابتدا وارد شوید</div>
+  </div>
+</div>
+<script src="/assets/js/core.js"></script>
+<script>
+let user=null, myGamenets=[];
+async function load(){
+  user = await API.me();
+  const d = await API.get('/api/plans');
+  const box = document.getElementById('plans');
+  box.innerHTML = d.plans.map(p => `
+    <div class="card">
+      <div class="badge badge-purple">${esc(p.code)}</div>
+      <h3 style="margin-top:10px">${esc(p.name)}</h3>
+      <div class="price">${fmtMoney(p.price_cents)}</div>
+      <div class="muted">${p.duration_days} روز · ${fmtBytes(p.storage_bytes)} فضا · ${p.max_users} کاربر</div>
+      <ul class="muted" style="padding-right:18px;margin:10px 0">${(p.features||[]).map(f=>`<li>${esc(f)}</li>`).join('')}</ul>
+      <button class="btn btn-primary" style="width:100%" onclick='buy(${JSON.stringify(p.id)})' ${user?'':'disabled'}>
+        ${user?'خرید و پرداخت':'ابتدا وارد شوید'}
+      </button>
+    </div>`).join('');
+  if(user){
+    const mine = await API.get('/api/gamenets');
+    myGamenets = mine.gamenets || [];
+    const o = await API.get('/api/subscriptions/orders');
+    renderOrders(o.orders||[]);
+  }
+}
+function renderOrders(orders){
+  const el = document.getElementById('orders');
+  if(!orders.length){ el.innerHTML='<div class="empty">سفارشی نیست</div>'; return; }
+  el.innerHTML = `<div style="overflow:auto"><table>
+    <tr><th>شماره</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th></th></tr>
+    ${orders.map(o=>`<tr>
+      <td>${esc(o.public_id)}</td><td>${esc(o.plan_name)}</td>
+      <td>${fmtMoney(o.amount_cents)}</td>
+      <td><span class="badge ${o.status==='paid'?'badge-green':'badge-amber'}">${esc(o.status)}</span></td>
+      <td>${o.status!=='paid'?`<button class="btn btn-primary btn-sm" onclick="pay(${o.id})">پرداخت</button>`:'✅'}</td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+async function buy(planId){
+  try{
+    if(!myGamenets.length){
+      const name = prompt('نام گیم‌نت خود را وارد کنید:');
+      if(!name) return;
+      const g = await API.post('/api/gamenets', { name });
+      myGamenets = [g.gamenet];
+    }
+    const gid = myGamenets[0].id;
+    const headers = { 'Idempotency-Key': crypto.randomUUID() };
+    const res = await API.request('/api/subscriptions/orders', { method:'POST', body:{ gamenet_id: gid, plan_id: planId }, headers });
+    document.getElementById('alert').innerHTML = `<div class="alert alert-info">سفارش ${esc(res.order.public_id)} ساخته شد — در حال پرداخت…</div>`;
+    await pay(res.order.id);
+  }catch(e){
+    document.getElementById('alert').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
+  }
+}
+async function pay(id){
+  try{
+    await API.post(`/api/subscriptions/orders/${id}/pay`, {});
+    toast('پرداخت موفق — اشتراک فعال شد');
+    await load();
+  }catch(e){ toast(e.message,'err'); }
+}
+load().catch(e=>toast(e.message,'err'));
+</script>
+</body></html>

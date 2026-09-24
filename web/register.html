@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ثبت‌نام — GameNet Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/">🎮 <span>GameNet Platform</span></a>
+  <div class="spacer"></div><a href="/login">ورود</a>
+</div></nav>
+<div class="container narrow" style="padding-top:48px">
+  <div class="card">
+    <h2>ساخت حساب</h2>
+    <p class="muted">رمز باید حداقل ۸ کاراکتر باشد</p>
+    <div id="alert"></div>
+    <label>نام</label><input id="name" placeholder="نام شما">
+    <label>ایمیل</label><input id="email" type="email">
+    <label>رمز عبور</label><input id="password" type="password" minlength="8">
+    <label>تکرار رمز</label><input id="password2" type="password" minlength="8">
+    <button id="btn" class="btn btn-primary" style="width:100%;margin-top:18px">ثبت‌نام</button>
+    <p class="muted" style="margin-top:14px">حساب دارید؟ <a href="/login">ورود</a></p>
+  </div>
+</div>
+<script src="/assets/js/core.js"></script>
+<script>
+document.getElementById('btn').onclick = async ()=>{
+  document.getElementById('alert').innerHTML='';
+  const p=document.getElementById('password').value, p2=document.getElementById('password2').value;
+  if(p!==p2){ document.getElementById('alert').innerHTML='<div class="alert alert-error">رمزها یکسان نیستند</div>'; return; }
+  const btn=document.getElementById('btn'); btn.disabled=true;
+  try{
+    await API.post('/api/auth/register', {
+      name: document.getElementById('name').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      password: p,
+    });
+    toast('حساب ساخته شد');
+    location.href='/app/';
+  }catch(e){
+    document.getElementById('alert').innerHTML=`<div class="alert alert-error">${esc(e.message)}</div>`;
+    btn.disabled=false;
+  }
+};
+</script>
+</body></html>

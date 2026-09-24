@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>پنل مدیریت اصلی — GameNet Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/">👑 <span>پنل مدیریت اصلی</span></a>
+  <div class="spacer"></div>
+  <span id="who" class="muted small"></span>
+  <a href="/app/" class="btn btn-ghost btn-sm">پنل گیم‌نت</a>
+  <button class="btn btn-danger btn-sm" onclick="logout()">خروج</button>
+</div></nav>
+<div class="container layout">
+  <aside class="side">
+    <button data-s="stats" class="active">آمار کلی</button>
+    <button data-s="users">کاربران</button>
+    <button data-s="gamenets">گیم‌نت‌ها</button>
+    <button data-s="subs">اشتراک‌ها</button>
+    <button data-s="licenses">License</button>
+    <button data-s="payments">پرداخت و فاکتور</button>
+    <button data-s="tickets">تیکت‌ها</button>
+    <button data-s="storage">ذخیره‌سازی</button>
+    <button data-s="audit">Audit Log</button>
+    <button data-s="backups">بکاپ</button>
+    <button data-s="settings">تنظیمات</button>
+  </aside>
+  <main>
+    <section id="s-stats"></section>
+    <section id="s-users" class="hidden"></section>
+    <section id="s-gamenets" class="hidden"></section>
+    <section id="s-subs" class="hidden"></section>
+    <section id="s-licenses" class="hidden"></section>
+    <section id="s-payments" class="hidden"></section>
+    <section id="s-tickets" class="hidden"></section>
+    <section id="s-storage" class="hidden"></section>
+    <section id="s-audit" class="hidden"></section>
+    <section id="s-backups" class="hidden"></section>
+    <section id="s-settings" class="hidden"></section>
+  </main>
+</div>
+<script src="/assets/js/core.js"></script>
+<script src="/assets/js/admin.js"></script>
+</body></html>

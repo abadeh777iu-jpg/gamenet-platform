@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ورود — GameNet Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/">🎮 <span>GameNet Platform</span></a>
+  <div class="spacer"></div><a href="/register">ثبت‌نام</a>
+</div></nav>
+<div class="container narrow" style="padding-top:48px">
+  <div class="card">
+    <h2>ورود</h2>
+    <p class="muted">به حساب خود وارد شوید</p>
+    <div id="alert"></div>
+    <label>ایمیل</label>
+    <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+    <label>رمز عبور</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button id="btn" class="btn btn-primary" style="flex:1">ورود</button>
+    </div>
+    <p class="muted" style="margin-top:14px"><a href="/forgot">فراموشی رمز</a> · <a href="/register">ساخت حساب</a></p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+    <button id="gbtn" class="btn btn-secondary" style="width:100%" disabled>Google Login (پیکربندی‌نشده)</button>
+  </div>
+</div>
+<script src="/assets/js/core.js"></script>
+<script>
+const alertBox = document.getElementById('alert');
+function show(msg, cls='alert-error'){ alertBox.innerHTML = `<div class="alert ${cls}">${esc(msg)}</div>`; }
+document.getElementById('btn').onclick = async ()=>{
+  alertBox.innerHTML='';
+  const btn=document.getElementById('btn'); btn.disabled=true; btn.classList.add('loading');
+  try{
+    const r = await API.post('/api/auth/login', {
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('password').value,
+    });
+    toast('خوش آمدید');
+    const next = qs('next');
+    location.href = next || (r.user.roles.includes('super_admin')||r.user.roles.includes('admin') ? '/admin/' : '/app/');
+  }catch(e){ show(e.message); btn.disabled=false; btn.classList.remove('loading'); }
+};
+API.get('/api/auth/me').then(u=>{ if(u) location.href='/app/'; }).catch(()=>{});
+</script>
+</body></html>
