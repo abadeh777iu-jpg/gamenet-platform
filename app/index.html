@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>پنل گیم‌نت — GameNet Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="/">🎮 <span>پنل گیم‌نت</span></a>
+  <div class="spacer"></div>
+  <a href="/plans">خرید اشتراک</a>
+  <span id="who" class="muted small"></span>
+  <button class="btn btn-ghost btn-sm" onclick="logout()">خروج</button>
+</div></nav>
+<div class="container layout">
+  <aside class="side">
+    <button data-s="dash" class="active">داشبورد</button>
+    <button data-s="sub">اشتراک و لایسنس</button>
+    <button data-s="files">فایل‌ها و فضا</button>
+    <button data-s="tickets">تیکت‌ها</button>
+    <button data-s="ai">پشتیبان AI</button>
+    <button data-s="notif">اعلان‌ها</button>
+    <button data-s="gamenets">گیم‌نت‌های من</button>
+  </aside>
+  <main>
+    <div id="g-select" class="card hidden" style="margin-bottom:12px">
+      <label>گیم‌نت فعال</label>
+      <select id="gid"></select>
+    </div>
+    <section id="s-dash"></section>
+    <section id="s-sub" class="hidden"></section>
+    <section id="s-files" class="hidden"></section>
+    <section id="s-tickets" class="hidden"></section>
+    <section id="s-ai" class="hidden"></section>
+    <section id="s-notif" class="hidden"></section>
+    <section id="s-gamenets" class="hidden"></section>
+  </main>
+</div>
+<script src="/assets/js/core.js"></script>
+<script src="/assets/js/panel.js"></script>
+</body></html>
