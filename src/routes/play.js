@@ -18,12 +18,35 @@ const { audit } = require('../services/audit');
 const {
   SYSTEM_TYPES, SYSTEM_STATUSES, MANUAL_SYSTEM_STATUSES,
   costFor, elapsedSec, matchTariff, sessionView, openSession,
-  liveOverview, dashboardStats, utcMs, hms,
+  liveOverview, dashboardStats, utcMs, hms, storageSummary,
 } = require('../services/play');
 
 const router = express.Router({ mergeParams: true });
 router.use(requireAuth);
 router.use(requireTenant('gamenetId'));
+
+/**
+ * Owner decision: nothing in the play subsystem may be used before a license
+ * is active for this gamenet (issued by subscription purchase OR an admin
+ * license event). Read AND write endpoints are all behind this gate.
+ */
+function hasActiveLicense(gamenetId){
+  return !!db.prepare(`
+    SELECT id FROM licenses
+    WHERE gamenet_id=? AND status='active'
+      AND (expires_at IS NULL OR expires_at > datetime('now'))
+    LIMIT 1`).get(gamenetId);
+}
+router.use((req, res, next) => {
+  if(!hasActiveLicense(req.gamenet.id)){
+    return res.status(403).json({
+      error: 'license_required',
+      message: 'لایسنس فعال نشده است — برای استفاده از سیستم بازی، تعرفه، بوفه و فاکتورها ابتدا باید لایسنس گیم‌نت شما فعال شود.',
+    });
+  }
+  next();
+});
+
 router.use(rateLimit({ windowMs: 60000, max: 400 }));
 
 const err400 = (error, message) => Object.assign(new Error(message), { status: 400, publicMessage: message, code: error });
@@ -58,6 +81,20 @@ router.get('/live', asyncHandler(async (req, res) => {
 
 router.get('/dashboard', asyncHandler(async (req, res) => {
   res.json(dashboardStats(req.gamenet.id));
+}));
+
+/**
+ * Repurposed storage view: quota covers persisted SETTINGS + GAME INVOICES
+ * (owner decision — customer file uploads are not part of the gamenet panel).
+ */
+router.get('/storage', asyncHandler(async (req, res) => {
+  const s = storageSummary(req.gamenet.id);
+  const invoices = db.prepare(`
+    SELECT sl.id, sl.total_cents, sl.game_cents, sl.buffet_cents, sl.sold_date, sl.created_at,
+           ps.public_id, ps.system_number, ps.duration_sec, ps.started_at, ps.ended_at, ps.tariff_name
+    FROM play_sales sl LEFT JOIN play_sessions ps ON ps.id = sl.session_id
+    WHERE sl.gamenet_id=? ORDER BY sl.id DESC LIMIT 50`).all(req.gamenet.id);
+  res.json({ ...s, invoices });
 }));
 
 /* ─────────────────────────  SYSTEMS CRUD  ───────────────────────── */

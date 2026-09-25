@@ -227,8 +227,47 @@ function dashboardStats(gamenetId, nowMs){
   };
 }
 
+/**
+ * Storage is repurposed per owner decision: instead of customer file uploads,
+ * a tenant's quota covers PERSISTED SETTINGS + GAME INVOICES (systems, prices,
+ * buffet, sessions, sales, audit). Size is an integer approximation of the
+ * row bytes this tenant occupies; limit comes from the gamenet quota.
+ */
+function storageSummary(gamenetId){
+  const sum = (sql) => db.prepare(sql).get(gamenetId);
+  const parts = {
+    systems:  sum(`SELECT COUNT(*) c, COALESCE(SUM(LENGTH(number)+LENGTH(name)+48),0) b FROM play_systems WHERE gamenet_id=?`),
+    tariffs:  sum(`SELECT COUNT(*) c, COALESCE(SUM(LENGTH(name)+80),0) b FROM tariffs WHERE gamenet_id=?`),
+    buffet:   sum(`SELECT COUNT(*) c, COALESCE(SUM(LENGTH(name)+48),0) b FROM buffet_items WHERE gamenet_id=?`),
+    sessions: sum(`SELECT COUNT(*) c, COALESCE(SUM(LENGTH(public_id)+LENGTH(system_number)+LENGTH(system_name)+LENGTH(tariff_name)+LENGTH(started_by_name)+LENGTH(ended_by_name)+200),0) b FROM play_sessions WHERE gamenet_id=?`),
+    invoices: sum(`SELECT COUNT(*) c, COALESCE(SUM(140),0) b FROM play_sales WHERE gamenet_id=?`),
+    audit:    sum(`SELECT COUNT(*) c, COALESCE(SUM(LENGTH(action)+LENGTH(entity)+LENGTH(entity_id)+LENGTH(meta_json)+LENGTH(ip)+96),0) b FROM audit_logs WHERE gamenet_id=?`),
+  };
+  const lines = sum(`SELECT COUNT(*) c, COALESCE(SUM(LENGTH(item_name)+64),0) b
+    FROM session_buffet_lines l JOIN play_sessions s ON s.id=l.session_id WHERE s.gamenet_id=?`);
+  parts.lines = lines;
+  const used = Object.values(parts).reduce((a, p) => a + (p.b|0), 0);
+  const g = db.prepare(`SELECT storage_limit_bytes FROM gamenets WHERE id=?`).get(gamenetId);
+  const limit = (g && g.storage_limit_bytes) || 0;
+  return {
+    used_bytes: used,
+    limit_bytes: limit,
+    ratio: limit ? Math.min(1, used / limit) : 0,
+    counts: {
+      systems: parts.systems.c,
+      tariffs: parts.tariffs.c,
+      buffet_items: parts.buffet.c,
+      sessions: parts.sessions.c,
+      invoices: parts.invoices.c,
+      buffet_lines: lines.c,
+      audit: parts.audit.c,
+    },
+    breakdown: Object.entries(parts).map(([k, v]) => ({ kind: k, count: v.c, bytes: v.b|0 })),
+  };
+}
+
 module.exports = {
   OPEN_STATUSES, SYSTEM_TYPES, SYSTEM_STATUSES, MANUAL_SYSTEM_STATUSES,
   utcMs, hms, costFor, elapsedSec, matchTariff, sessionView,
-  openSession, openSessions, liveOverview, dashboardStats, inHoliday,
+  openSession, openSessions, liveOverview, dashboardStats, inHoliday, storageSummary,
 };

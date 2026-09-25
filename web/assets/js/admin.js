@@ -1,7 +1,7 @@
 'use strict';
 let user=null;
 const $=id=>document.getElementById(id);
-const sections=['stats','users','gamenets','subs','licenses','payments','tickets','storage','audit','backups','settings'];
+const sections=['stats','users','gamenets','subs','licenses','events','payments','tickets','storage','audit','backups','settings'];
 document.querySelectorAll('.side button').forEach(b=>{
   b.onclick=()=>{
     document.querySelectorAll('.side button').forEach(x=>x.classList.remove('active'));
@@ -128,6 +128,57 @@ const loaders = {
             : `<button class="btn btn-primary btn-sm" onclick="licSet(${l.id},'active')">فعال‌سازی</button>`}
         </td></tr>`).join('')||'<tr><td colspan="6" class="empty">موردی نیست</td></tr>'}
     </table></div></div>`;
+  },
+  async events(){
+    const [d, gs] = await Promise.all([
+      API.get('/api/admin/license-events'),
+      API.get('/api/admin/gamenets'),
+    ]);
+    const gOpts = (gs.gamenets||[]).filter(g=>g.status==='active')
+      .map(g=>`<option value="${g.id}">#${g.id} — ${esc(g.name)}</option>`).join('');
+    $('s-events').innerHTML = `
+      <div class="card">
+        <h3>🎪 ایونت‌های لایسنس رایگان</h3>
+        <p class="muted small">هر ایونت یک مهلت مشخص (پیش‌فرض ۳۰ روز = یک ماه) دارد. با «صدور لایسنس» برای هر گیم‌نت، لایسنس رایگان صادر می‌شود. با <b>غیرفعال کردن ایونت</b>، همه لایسنس‌های صادرشده از آن ایونت بلافاصله باطل می‌شوند (لایسنس‌های خریداری‌شده دست‌نخورده می‌مانند).</p>
+        <div class="grid g4" style="gap:8px;margin-top:8px">
+          <div><label>نام ایونت</label><input id="ev-name" placeholder="مثلاً جشنواره پاییز"></div>
+          <div><label>مدت (روز)</label><input id="ev-days" type="number" min="1" max="3650" value="30" dir="ltr"></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-primary btn-sm" style="width:100%" onclick="evCreate()">ایجاد ایونت</button></div>
+        </div>
+        <div style="overflow:auto;margin-top:14px"><table>
+          <tr><th>#</th><th>نام</th><th>مدت</th><th>وضعیت</th><th>صادرشده</th><th>فعال</th><th>صدور لایسنس</th><th></th></tr>
+          ${(d.events||[]).map(e=>`<tr>
+            <td>${e.id}</td>
+            <td><b>${esc(e.name)}</b></td>
+            <td>${e.duration_days} روز</td>
+            <td><span class="badge ${e.active?'badge-green':'badge-red'}">${e.active?'فعال':'غیرفعال'}</span></td>
+            <td>${e.issued}</td>
+            <td>${e.active_issued}</td>
+            <td>
+              <div style="display:flex;gap:6px">
+                <select id="ev-gid-${e.id}" style="min-width:150px">${gOpts||'<option value="">گیم‌نتی نیست</option>'}</select>
+                <button class="btn btn-primary btn-sm" onclick="evIssue(${e.id})" ${e.active?'':'disabled'}>صدور</button>
+              </div>
+            </td>
+            <td>${e.active
+              ? `<button class="btn btn-danger btn-sm" onclick="evToggle(${e.id},0)">غیرفعال کردن</button>`
+              : `<button class="btn btn-secondary btn-sm" onclick="evToggle(${e.id},1)">فعال کردن</button>`}</td>
+          </tr>`).join('')||'<tr><td colspan="8" class="empty">ایونتی ساخته نشده</td></tr>'}
+        </table></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3>لایسنس‌های صادرشده از ایونت‌ها</h3>
+        <div style="overflow:auto;margin-top:8px"><table>
+          <tr><th>ایونت</th><th>گیم‌نت</th><th>کلید</th><th>وضعیت</th><th>انقضا</th></tr>
+          ${(d.issued||[]).map(l=>`<tr>
+            <td>${esc((d.events||[]).find(e=>e.id===l.event_id)?.name||('#'+l.event_id))}</td>
+            <td>${esc(l.gamenet_name)}</td>
+            <td><code class="small">${esc(String(l.key).slice(0,14))}…</code></td>
+            <td><span class="badge ${l.status==='active'?'badge-green':'badge-red'}">${esc(l.status)}</span></td>
+            <td class="small">${esc(l.expires_at||'—')}</td>
+          </tr>`).join('')||'<tr><td colspan="5" class="empty">موردی نیست</td></tr>'}
+        </table></div>
+      </div>`;
   },
   async payments(){
     const d = await API.get('/api/admin/payments');
@@ -358,7 +409,30 @@ async function replyAdm(id,resolve){
     openTicketAdmin(id); loaders.tickets();
   }catch(e){ toast(e.message,'err'); }
 }
-Object.assign(window,{uStatus,gStatus,subAct,licSet,createBackup,pruneBackup,recalc,saveSetting,saveCard,confirmPay,rejectPay,uVerify,openTicketAdmin,replyAdm});
+async function evCreate(){
+  try{
+    await API.post('/api/admin/license-events', { name: $('ev-name').value, duration_days: Number($('ev-days').value)||30 });
+    toast('ایونت ساخته شد'); $('ev-name').value=''; loaders.events();
+  }catch(e){ toast(e.message,'err'); }
+}
+async function evToggle(id, active){
+  if(!active && !confirm('ایونت غیرفعال شود؟ همه لایسنس‌های صادرشده از آن بلافاصله باطل می‌شوند.')) return;
+  try{
+    const r = await API.post('/api/admin/license-events/'+id+'/status', { active: !!active });
+    toast(active ? 'ایونت فعال شد' : ('ایونت غیرفعال شد — '+(r.revoked||0)+' لایسنس باطل شد'));
+    loaders.events(); loaders.licenses();
+  }catch(e){ toast(e.message,'err'); }
+}
+async function evIssue(id){
+  const sel = $('ev-gid-'+id);
+  if(!sel || !sel.value) return toast('گیم‌نتی انتخاب نکرده‌اید','err');
+  try{
+    const r = await API.post('/api/admin/license-events/'+id+'/issue', { gamenet_id: Number(sel.value) });
+    toast('لایسنس رایگان صادر شد — تا '+esc(r.license.expires_at||''));
+    loaders.events(); loaders.licenses();
+  }catch(e){ toast(e.message,'err'); }
+}
+Object.assign(window,{uStatus,gStatus,subAct,licSet,createBackup,pruneBackup,recalc,saveSetting,saveCard,confirmPay,rejectPay,uVerify,openTicketAdmin,replyAdm,evCreate,evToggle,evIssue});
 
 (async()=>{
   // Dedicated admin gate: NO redirect to the customer /login page.

@@ -136,6 +136,30 @@ CREATE TABLE IF NOT EXISTS play_sales (
 CREATE INDEX IF NOT EXISTS idx_sales_gamenet_date ON play_sales(gamenet_id, sold_date);
 `;
 
+/**
+ * 003_license_events — admin-run license events: grant free N-day licenses
+ * (default 1 month) to any gamenet, deactivate an event to revoke them all.
+ */
+const SQL_003_EVENTS = `
+CREATE TABLE IF NOT EXISTS license_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  duration_days INTEGER NOT NULL DEFAULT 30,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`;
+
+function ensureLicenseEventColumn(){
+  const cols = db.prepare(`PRAGMA table_info(licenses)`).all().map(c => c.name);
+  if(!cols.includes('event_id')){
+    db.exec(`ALTER TABLE licenses ADD COLUMN event_id INTEGER REFERENCES license_events(id)`);
+    console.log('applied licenses.event_id column');
+  }
+}
+
 function migrate(){
   db.exec(`CREATE TABLE IF NOT EXISTS _migrations(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,6 +175,14 @@ function migrate(){
   if(!applied.includes('002_play')){
     db.transaction(()=>{ db.exec(SQL_002_PLAY); db.prepare('INSERT INTO _migrations(name) VALUES(?)').run('002_play'); })();
     console.log('applied 002_play');
+  }
+  if(!applied.includes('003_license_events')){
+    db.transaction(()=>{
+      db.exec(SQL_003_EVENTS);
+      ensureLicenseEventColumn();
+      db.prepare('INSERT INTO _migrations(name) VALUES(?)').run('003_license_events');
+    })();
+    console.log('applied 003_license_events');
   }
   console.log('migrations up-to-date');
 }

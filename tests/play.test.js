@@ -5,7 +5,7 @@ const { app, req, cookieJar, csrfOf } = require('./helpers');
 const { db } = require('../src/db');
 const { costFor, matchTariff, elapsedSec, hms, utcMs } = require('../src/services/play');
 
-async function ownerSetup(tag){
+async function ownerSetup(tag, { license = true } = {}){
   const ts = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
   const email = `play_${tag}_${ts}@t.local`.replace(/[^a-z0-9@._-]/gi, '');
   const r = await req(app, 'POST', '/api/auth/register', { body: { email, password: 'Passw0rd!x', name: 'Owner ' + tag } });
@@ -16,7 +16,13 @@ async function ownerSetup(tag){
     body: { name: 'Play Club ' + ts, slug: 'play-' + ts.replace(/[^a-z0-9]/gi, '') },
   });
   assert.equal(g.status, 201, JSON.stringify(g.data));
-  return { jar, csrf, uid: r.data.user.id, gid: g.data.gamenet.id, email };
+  const gid = g.data.gamenet.id;
+  if(license){
+    const { issueLicense } = require('../src/services/license');
+    issueLicense({ gamenetId: gid, subscriptionId: null,
+      expiresAt: new Date(Date.now() + 30*86400000).toISOString().slice(0,19).replace('T',' ') });
+  }
+  return { jar, csrf, uid: r.data.user.id, gid, email };
 }
 const auth = s => ({ cookie: s.jar, headers: { 'x-csrf-token': s.csrf } });
 const P = (s, p) => `/api/gamenets/${s.gid}/play${p}`;
@@ -278,4 +284,112 @@ test('buffet line remove restores stock; closed session rejects edits', async ()
   assert.equal(rr.status, 409, 'closed session rejects buffet');
   rr = await req(app, 'POST', P(s, `/sessions/${sid}/stop`), { ...auth(s), body: {} });
   assert.equal(rr.status, 409, 'double stop rejected');
+});
+
+
+/* ── license gate ── */
+test('license gate: no active license → 403 on every play endpoint', async () => {
+  const s = await ownerSetup('nolic', { license: false });
+  let rr = await req(app, 'GET', P(s, '/live'), auth(s));
+  assert.equal(rr.status, 403, JSON.stringify(rr.data));
+  assert.equal(rr.data.error, 'license_required');
+  rr = await req(app, 'POST', P(s, '/systems'), { ...auth(s), body: { number: 'PC-13', type: 'pc' } });
+  assert.equal(rr.status, 403, 'cannot create systems without license');
+  rr = await req(app, 'POST', P(s, '/tariffs'), { ...auth(s), body: { name: 'x', rate_per_hour: 1000 } });
+  assert.equal(rr.status, 403, 'cannot create tariffs without license');
+  rr = await req(app, 'GET', P(s, '/storage'), auth(s));
+  assert.equal(rr.status, 403, 'storage/invoices locked too');
+  rr = await req(app, 'GET', P(s, '/dashboard'), auth(s));
+  assert.equal(rr.status, 403, 'dashboard stats locked too');
+});
+
+/* ── admin license events ── */
+test('admin license event: grant free 1-month → use → deactivate revokes', async () => {
+  const s = await ownerSetup('evt', { license: false });
+
+  // platform admin logs in (seeded credentials)
+  const ad = await req(app, 'POST', '/api/auth/login', { body: { email: 'admin@gamenet.local', password: 'Admin@12345' } });
+  assert.equal(ad.status, 200, JSON.stringify(ad.data));
+  assert.ok(ad.data.user.roles.some(r => r === 'admin' || r === 'super_admin'));
+  const aJar = cookieJar(ad.setCookie), aCsrf = csrfOf(ad.setCookie);
+  const aAuth = { cookie: aJar, headers: { 'x-csrf-token': aCsrf } };
+
+  // still locked before the event
+  let rr = await req(app, 'GET', P(s, '/live'), auth(s));
+  assert.equal(rr.status, 403);
+
+  // create event (default = 30 days = one month)
+  rr = await req(app, 'POST', '/api/admin/license-events', { ...aAuth, body: { name: 'جشنواره تست' } });
+  assert.equal(rr.status, 201, JSON.stringify(rr.data));
+  const ev = rr.data.event;
+  assert.equal(ev.duration_days, 30, 'default one month');
+  assert.equal(ev.active, 1);
+
+  // issue free license to the gamenet
+  rr = await req(app, 'POST', `/api/admin/license-events/${ev.id}/issue`, { ...aAuth, body: { gamenet_id: s.gid } });
+  assert.equal(rr.status, 201, JSON.stringify(rr.data));
+  const lic = rr.data.license;
+  assert.equal(lic.status, 'active');
+  assert.equal(lic.event_id, ev.id);
+  const daysLeft = (Date.parse(lic.expires_at.replace(' ', 'T') + 'Z') - Date.now()) / 86400000;
+  assert.ok(daysLeft > 29 && daysLeft <= 30.1, '≈30 days, got ' + daysLeft);
+
+  // now the play subsystem unlocks
+  rr = await req(app, 'GET', P(s, '/live'), auth(s));
+  assert.equal(rr.status, 200, 'unlocked after event issue');
+
+  // deactivate event → its license revokes → locked again
+  rr = await req(app, 'POST', `/api/admin/license-events/${ev.id}/status`, { ...aAuth, body: { active: false } });
+  assert.equal(rr.status, 200);
+  assert.equal(rr.data.revoked, 1, 'one license revoked');
+  assert.equal(rr.data.event.active, 0);
+  rr = await req(app, 'GET', P(s, '/live'), auth(s));
+  assert.equal(rr.status, 403, 'locked after deactivation');
+
+  // reactivate event (can grant again) + re-issue → unlocked
+  rr = await req(app, 'POST', `/api/admin/license-events/${ev.id}/status`, { ...aAuth, body: { active: true } });
+  assert.equal(rr.data.event.active, 1);
+  rr = await req(app, 'POST', `/api/admin/license-events/${ev.id}/issue`, { ...aAuth, body: { gamenet_id: s.gid } });
+  assert.equal(rr.status, 201);
+  rr = await req(app, 'GET', P(s, '/live'), auth(s));
+  assert.equal(rr.status, 200);
+
+  // issuing while event inactive → 409
+  await req(app, 'POST', `/api/admin/license-events/${ev.id}/status`, { ...aAuth, body: { active: false } });
+  rr = await req(app, 'POST', `/api/admin/license-events/${ev.id}/issue`, { ...aAuth, body: { gamenet_id: s.gid } });
+  assert.equal(rr.status, 409);
+
+  // regular customers cannot manage events
+  rr = await req(app, 'POST', '/api/admin/license-events', { ...auth(s), body: { name: 'x' } });
+  assert.equal(rr.status, 403, 'non-admin cannot create events');
+});
+
+/* ── repurposed storage + invoices ── */
+test('storage endpoint reports settings data + saved game invoices', async () => {
+  const s = await ownerSetup('store');
+  await req(app, 'POST', P(s, '/tariffs'), { ...auth(s), body: { name: 'p', rate_per_hour: 100000 } });
+  let rr = await req(app, 'POST', P(s, '/systems'), { ...auth(s), body: { number: 'PC-77', type: 'pc' } });
+  const sysId = rr.data.system.id;
+  rr = await req(app, 'POST', P(s, '/buffet'), { ...auth(s), body: { name: 'ساندویچ', price_cents: 80000, stock: 3 } });
+  const itemId = rr.data.item.id;
+  rr = await req(app, 'POST', P(s, `/systems/${sysId}/start`), { ...auth(s), body: {} });
+  const sid = rr.data.session.id;
+  await req(app, 'POST', P(s, `/sessions/${sid}/buffet`), { ...auth(s), body: { item_id: itemId, qty: 1 } });
+  rr = await req(app, 'POST', P(s, `/sessions/${sid}/stop`), { ...auth(s), body: {} });
+  assert.equal(rr.status, 200);
+
+  rr = await req(app, 'GET', P(s, '/storage'), auth(s));
+  assert.equal(rr.status, 200, JSON.stringify(rr.data));
+  const d = rr.data;
+  assert.ok(d.used_bytes > 0, 'settings+invoice bytes counted');
+  assert.ok(d.limit_bytes > 0, 'quota from gamenet');
+  assert.equal(d.counts.systems, 1);
+  assert.equal(d.counts.tariffs, 1);
+  assert.equal(d.counts.buffet_items, 1);
+  assert.equal(d.counts.sessions, 1);
+  assert.equal(d.counts.invoices, 1, 'game invoice saved');
+  assert.equal(d.invoices.length, 1, 'invoice list returned');
+  assert.ok(d.invoices[0].total_cents > 0);
+  assert.ok(d.invoices[0].public_id, 'invoice linked to session facture id');
+  assert.ok(d.breakdown.some(b => b.kind === 'invoices' && b.bytes > 0));
 });

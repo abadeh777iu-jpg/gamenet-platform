@@ -3,10 +3,10 @@ const { db } = require('../db');
 const { licenseKey } = require('./ids');
 const { audit } = require('./audit');
 
-function issueLicense({ gamenetId, subscriptionId, expiresAt }){
+function issueLicense({ gamenetId, subscriptionId, expiresAt, eventId=null }){
   const key = licenseKey();
-  db.prepare(`INSERT INTO licenses(gamenet_id,subscription_id,key,status,activated_at,expires_at)
-    VALUES(?,?,?,'active',datetime('now'),?)`).run(gamenetId, subscriptionId, key, expiresAt);
+  db.prepare(`INSERT INTO licenses(gamenet_id,subscription_id,key,status,activated_at,expires_at,event_id)
+    VALUES(?,?,?,'active',datetime('now'),?,?)`).run(gamenetId, subscriptionId, key, expiresAt, eventId);
   return db.prepare(`SELECT * FROM licenses WHERE gamenet_id=? AND status='active' ORDER BY id DESC LIMIT 1`).get(gamenetId);
 }
 function revokeAllLicenses(gamenetId, status='revoked'){

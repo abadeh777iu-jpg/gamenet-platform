@@ -204,4 +204,73 @@ router.get('/gamenets/:gamenetId/overview', requireTenant(), (req,res)=>{
     audit: listAudit({ gamenetId: req.gamenet.id, limit: 50 }),
   });
 });
+/* ═══════════ License Events — free N-day (default 1 month) grants ═══════════
+ * Admin creates an event, issues free licenses from it to any gamenet,
+ * and can deactivate the event anytime → all its active licenses revoke.
+ */
+router.get('/license-events', (req, res) => {
+  const events = db.prepare(`
+    SELECT e.*,
+      (u.email || '') created_by_email,
+      (SELECT COUNT(*) FROM licenses l WHERE l.event_id=e.id) issued,
+      (SELECT COUNT(*) FROM licenses l WHERE l.event_id=e.id AND l.status='active') active_issued
+    FROM license_events e LEFT JOIN users u ON u.id=e.created_by
+    ORDER BY e.id DESC LIMIT 200`).all();
+  const issued = db.prepare(`
+    SELECT l.id, l.event_id, l.key, l.status, l.expires_at, l.activated_at, g.name gamenet_name, g.id gamenet_id
+    FROM licenses l JOIN gamenets g ON g.id=l.gamenet_id
+    WHERE l.event_id IS NOT NULL ORDER BY l.id DESC LIMIT 200`).all();
+  res.json({ events, issued });
+});
+
+router.post('/license-events', requireRole('super_admin', 'admin'), rateLimit({ windowMs: 60000, max: 30 }), asyncHandler(async (req, res) => {
+  const { name, duration_days } = req.body || {};
+  const nm = String(name || '').trim().slice(0, 100);
+  if(!nm) return res.status(400).json({ error: 'name_required', message: 'نام ایونت الزامی است' });
+  let days = Math.floor(Number(duration_days));
+  if(!Number.isFinite(days) || days < 1 || days > 3650) days = 30; // default: one month
+  const r = db.prepare(`INSERT INTO license_events(name,duration_days,created_by) VALUES(?,?,?)`)
+    .run(nm, days, req.user.id);
+  require('../services/audit').audit({ actorUserId: req.user.id, actorRole: req.user.roles.join(','),
+    action: 'admin.license_event_create', entity: 'license_event', entityId: r.lastInsertRowid, meta: { name: nm, days }, ip: req.ip });
+  res.status(201).json({ event: db.prepare('SELECT * FROM license_events WHERE id=?').get(r.lastInsertRowid) });
+}));
+
+router.post('/license-events/:id/status', requireRole('super_admin', 'admin'), asyncHandler(async (req, res) => {
+  const ev = db.prepare('SELECT * FROM license_events WHERE id=?').get(req.params.id);
+  if(!ev) return res.status(404).json({ error: 'not_found', message: 'ایونت یافت نشد' });
+  const active = !!(req.body && req.body.active);
+  let revoked = 0;
+  if(active){
+    db.prepare(`UPDATE license_events SET active=1, updated_at=datetime('now') WHERE id=?`).run(ev.id);
+  } else {
+    // deactivate → revoke every still-active license this event granted
+    db.prepare(`UPDATE license_events SET active=0, updated_at=datetime('now') WHERE id=?`).run(ev.id);
+    const r = db.prepare(`UPDATE licenses SET status='revoked', revoked_at=datetime('now')
+      WHERE event_id=? AND status='active'`).run(ev.id);
+    revoked = r.changes;
+  }
+  require('../services/audit').audit({ actorUserId: req.user.id, actorRole: req.user.roles.join(','),
+    action: active ? 'admin.license_event_activate' : 'admin.license_event_deactivate',
+    entity: 'license_event', entityId: ev.id, meta: { revoked }, ip: req.ip });
+  res.json({ event: db.prepare('SELECT * FROM license_events WHERE id=?').get(ev.id), revoked });
+}));
+
+router.post('/license-events/:id/issue', requireRole('super_admin', 'admin'), rateLimit({ windowMs: 60000, max: 60 }), asyncHandler(async (req, res) => {
+  const ev = db.prepare('SELECT * FROM license_events WHERE id=?').get(req.params.id);
+  if(!ev) return res.status(404).json({ error: 'not_found', message: 'ایونت یافت نشد' });
+  if(!ev.active) return res.status(409).json({ error: 'event_inactive', message: 'ایونت غیرفعال است — ابتدا آن را فعال کنید' });
+  const gid = Number(req.body && req.body.gamenet_id);
+  const g = db.prepare(`SELECT * FROM gamenets WHERE id=? AND status='active'`).get(gid);
+  if(!g) return res.status(404).json({ error: 'gamenet_not_found', message: 'گیم‌نت یافت نشد' });
+  // free grant on top of any existing license; deactivating the event later
+  // revokes ONLY event-issued licenses (paid subscription licenses stay intact)
+  const { issueLicense } = require('../services/license');
+  const ends = new Date(Date.now() + ev.duration_days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+  const lic = issueLicense({ gamenetId: g.id, subscriptionId: null, expiresAt: ends, eventId: ev.id });
+  require('../services/audit').audit({ actorUserId: req.user.id, actorRole: req.user.roles.join(','), gamenetId: g.id,
+    action: 'admin.license_event_issue', entity: 'license', entityId: lic.id, meta: { event: ev.name, days: ev.duration_days }, ip: req.ip });
+  res.status(201).json({ license: lic, event: ev });
+}));
+
 module.exports = router;

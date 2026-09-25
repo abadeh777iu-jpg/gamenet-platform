@@ -22,7 +22,7 @@ async function boot(){
   refreshAll();
 }
 async function refreshAll(){
-  await Promise.all([loadDash(), loadSub(), loadFiles(), loadTickets(), loadNotif(), loadGamenets(), loadSystems()]);
+  await Promise.all([loadDash(), loadSub(), loadTickets(), loadNotif(), loadGamenets(), loadSystems()]);
   initAI();
 }
 document.querySelectorAll('.side button').forEach(b=>{
@@ -34,6 +34,7 @@ function show(s){
   if(s==='systems') loadSystems().catch(()=>{});
   if(s==='history') loadHistory().catch(()=>{});
   if(s==='pricing') loadPricing().catch(()=>{});
+  if(s==='storage') loadStorage().catch(()=>{});
 }
 async function logout(){ await API.post('/api/auth/logout',{}); location.href='/'; }
 
@@ -71,19 +72,25 @@ async function loadDash(){
   try{
     const d = await API.get('/api/gamenets/'+current.id);
     const sub = d.subscription;
-    const st = d.storage;
-    const pct = st.limit_bytes ? Math.min(100, Math.round(st.ratio*100)) : 0;
+    let dataSt = null, stLicensed = true;
+    try{ dataSt = await API.get('/api/gamenets/'+current.id+'/play/storage'); }
+    catch(e){ if(e.status===403) stLicensed = false; }
+    const pct = dataSt ? Math.min(100, Math.round((dataSt.ratio||0)*100)) : 0;
     $('s-dash').innerHTML = `
       <div class="grid g4">
         <div class="stat"><div class="l">وضعیت اشتراک</div><div class="v">${sub?`<span class="badge badge-green">فعال</span>`:`<span class="badge badge-red">غیرفعال</span>`}</div></div>
         <div class="stat"><div class="l">تاریخ انقضا</div><div class="v" style="font-size:16px">${sub?esc(sub.ends_at||'—'):'—'}</div></div>
-        <div class="stat"><div class="l">فضای مصرفی</div><div class="v" style="font-size:16px">${fmtBytes(st.used_bytes)} / ${fmtBytes(st.limit_bytes)}</div></div>
+        <div class="stat"><div class="l">ذخیره‌سازی تنظیمات و فاکتور</div><div class="v" style="font-size:16px">${dataSt ? fmtBytes(dataSt.used_bytes)+' / '+fmtBytes(dataSt.limit_bytes) : (stLicensed?'—':'لایسنس فعال نشده')}</div></div>
         <div class="stat"><div class="l">تیکت‌های باز</div><div class="v">${(d.tickets||[]).filter(t=>t.status!=='resolved'&&t.status!=='closed').length}</div></div>
       </div>
       <div class="card" style="margin-top:14px">
-        <h3>فضای ذخیره‌سازی</h3>
+        <h3>💾 ذخیره‌سازی تنظیمات و فاکتورها</h3>
+        <div class="muted small">فضای شما صرف ذخیره سیستم‌های بازی، قیمت‌ها، بوفه و فاکتورهای بازی می‌شود (آپلود فایل ندارد).</div>
+        ${dataSt ? `
         <div class="progress" style="margin:10px 0"><i style="width:${pct}%"></i></div>
-        <div class="muted">${pct}% مصرف — ${st.file_count} فایل ${pct>=80?'<span class="badge badge-amber">هشدار</span>':''}</div>
+        <div class="muted">${pct}% مصرف — ${fmtBytes(dataSt.used_bytes)} از ${fmtBytes(dataSt.limit_bytes)} · سیستم‌ها: ${dataSt.counts.systems} · تعرفه‌ها: ${dataSt.counts.tariffs} · فاکتورها: ${dataSt.counts.invoices} ${pct>=80?'<span class="badge badge-amber">هشدار</span>':''}</div>
+        <div style="margin-top:8px"><button class="btn btn-secondary btn-sm" onclick="show('storage')">جزئیات و فاکتورها</button></div>`
+        : `<div class="muted">${stLicensed?'—':'🔒 لایسنس فعال نشده است'}</div>`}
       </div>
       <div id="dash-play"></div>
       <div class="card" style="margin-top:14px">
@@ -98,7 +105,10 @@ async function loadDash(){
     try{
       const p = await API.get('/api/gamenets/'+current.id+'/play/dashboard');
       renderDashPlay(p);
-    }catch(e){ /* play subsystem not set up yet */ }
+    }catch(e){
+      const box = $('dash-play');
+      if(box && e.status===403) box.innerHTML = licenseLockCard();
+    }
   }catch(e){ $('s-dash').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; }
 }
 
@@ -138,49 +148,7 @@ async function cancelSub(){
   catch(e){ toast(e.message,'err'); }
 }
 
-async function loadFiles(){
-  if(!current) return;
-  try{
-    const d = await API.get('/api/gamenets/'+current.id+'/files');
-    $('s-files').innerHTML = `
-      <div class="card">
-        <h3>فایل‌ها</h3>
-        <label>آپلود فایل (حداکثر ۲۵MB)</label>
-        <input type="file" id="fup">
-        <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="uploadFile()">آپلود</button>
-        <div style="overflow:auto;margin-top:14px"><table>
-          <tr><th>نام</th><th>حجم</th><th>تاریخ</th><th></th></tr>
-          ${(d.files||[]).map(f=>`<tr>
-            <td>${esc(f.original_name)}</td><td>${fmtBytes(f.size_bytes)}</td><td class="small">${esc(f.created_at)}</td>
-            <td><button class="btn btn-danger btn-sm" onclick="delFile(${f.id})">حذف</button></td></tr>`).join('')
-            ||'<tr><td colspan="4" class="empty">فایلی نیست</td></tr>'}
-        </table></div>
-      </div>`;
-  }catch(e){ $('s-files').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; }
-}
-async function uploadFile(){
-  const inp = $('fup');
-  if(!inp.files[0]) return toast('فایلی انتخاب نکرده‌اید','err');
-  const fd = new FormData();
-  fd.append('file', inp.files[0]);
-  try{
-    const m = document.cookie.match(/(?:^|;\s*)gn_csrf=([^;]+)/);
-    const res = await fetch(`/api/gamenets/${current.id}/files`, {
-      method:'POST', body: fd, credentials:'same-origin',
-      headers: { 'x-csrf-token': m?decodeURIComponent(m[1]):'' }
-    });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data.message||data.error);
-    toast('آپلود شد');
-    loadFiles(); loadDash();
-  }catch(e){ toast(e.message,'err'); }
-}
-async function delFile(id){
-  if(!confirm('حذف فایل؟')) return;
-  try{ await API.del(`/api/gamenets/${current.id}/files/${id}`); loadFiles(); loadDash(); }
-  catch(e){ toast(e.message,'err'); }
-}
-window.uploadFile=uploadFile; window.delFile=delFile;
+
 
 async function loadTickets(){
   try{
@@ -344,6 +312,7 @@ async function loadSystems(){
     if(!typing) renderSystems();
     else tickTimers();
   }catch(e){
+    if(e.status===403){ live=null; $('s-systems').innerHTML = licenseLockCard(); return; }
     if(!live) $('s-systems').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`;
   }
 }
@@ -644,6 +613,71 @@ function renderDashPlay(p){
     </div>`;
 }
 
+/* — license gate (shared lock card) — */
+function licenseLockCard(){
+  return `<div class="card" style="text-align:center;border-color:rgba(251,191,36,.5)">
+    <div style="font-size:42px">🔒</div>
+    <h3>لایسنس فعال نشده</h3>
+    <p class="muted">تا <b>لایسنس گیم‌نت</b> شما فعال نشود، استفاده از سیستم بازی، تعرفه‌ها، بوفه و فاکتورها امکان‌پذیر نیست.</p>
+    <p class="muted small">لایسنس با خرید اشتراک یا با «ایونت لایسنس» رایگان از طرف مدیر سایت فعال می‌شود.</p>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px">
+      <button class="btn btn-primary btn-sm" onclick="show('sub')">اشتراک و لایسنس</button>
+      <button class="btn btn-ghost btn-sm" onclick="show('dash')">بازگشت به داشبورد</button>
+    </div>
+  </div>`;
+}
+
+/* — repurposed storage: settings + game invoices (no file uploads) — */
+async function loadStorage(){
+  if(!current) return;
+  try{
+    const d = await API.get('/api/gamenets/'+current.id+'/play/storage');
+    const pct = Math.min(100, Math.round((d.ratio||0)*100));
+    const inv = (d.invoices||[]);
+    $('s-storage').innerHTML = `
+      <div class="card">
+        <h3>💾 ذخیره‌سازی تنظیمات و فاکتورها</h3>
+        <div class="alert alert-info">فضای اختصاص‌یافته شما صرف ذخیره‌ی <b>تنظیمات پنل</b> می‌شود: سیستم‌های بازی که اضافه می‌کنید، قیمت‌ها و تعرفه‌ها، آیتم‌های بوفه و <b>فاکتورهای بازی</b> — نه آپلود فایل.</div>
+        <div class="progress" style="margin:10px 0"><i style="width:${pct}%"></i></div>
+        <div class="muted">${pct}% مصرف — ${fmtBytes(d.used_bytes)} از ${fmtBytes(d.limit_bytes)}</div>
+        <div class="grid g4" style="margin-top:12px">
+          <div class="stat"><div class="l">سیستم‌های بازی</div><div class="v">${d.counts.systems}</div></div>
+          <div class="stat"><div class="l">تعرفه‌ها</div><div class="v">${d.counts.tariffs}</div></div>
+          <div class="stat"><div class="l">آیتم‌های بوفه</div><div class="v">${d.counts.buffet_items}</div></div>
+          <div class="stat"><div class="l">فاکتورهای بازی</div><div class="v">${d.counts.invoices}</div></div>
+        </div>
+        <div class="grid g4" style="margin-top:10px">
+          <div class="stat"><div class="l">سشن‌های ذخیره‌شده</div><div class="v">${d.counts.sessions}</div></div>
+          <div class="stat"><div class="l">سفارش‌های بوفه</div><div class="v">${d.counts.buffet_lines}</div></div>
+          <div class="stat"><div class="l">رکوردهای Audit</div><div class="v">${d.counts.audit}</div></div>
+          <div class="stat"><div class="l">حجم کل داده‌ها</div><div class="v" style="font-size:17px">${fmtBytes(d.used_bytes)}</div></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="pay-head">
+          <h3>🧾 فاکتورهای ذخیره‌شده بازی</h3>
+          <span class="muted small">${inv.length} فاکتور اخیر</span>
+        </div>
+        <div style="overflow:auto;margin-top:8px"><table>
+          <tr><th>شماره فاکتور</th><th>سیستم</th><th>تاریخ</th><th>مدت</th><th>هزینه بازی</th><th>بوفه</th><th>جمع</th></tr>
+          ${inv.map(i=>`<tr>
+            <td dir="ltr">${esc(i.public_id||('F-'+i.id))}</td>
+            <td dir="ltr"><b>${esc(i.system_number||'—')}</b></td>
+            <td class="small">${esc(i.sold_date||'—')}</td>
+            <td dir="ltr">${hmsUI(i.duration_sec||0)}</td>
+            <td>${fmtMoney(i.game_cents)}</td>
+            <td>${fmtMoney(i.buffet_cents)}</td>
+            <th>${fmtMoney(i.total_cents)}</th>
+          </tr>`).join('') || '<tr><td colspan="7" class="empty">هنوز فاکتوری ثبت نشده</td></tr>'}
+        </table></div>
+      </div>`;
+  }catch(e){
+    $('s-storage').innerHTML = e.status===403
+      ? licenseLockCard()
+      : `<div class="alert alert-error">${esc(e.message)}</div>`;
+  }
+}
+
 /* — session history — */
 async function loadHistory(){
   if(!current) return;
@@ -660,8 +694,9 @@ async function loadHistory(){
       </select></div>
     </div>
     <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="searchHistory()">جستجو</button>
-    <div id="hist-rows" style="margin-top:12px"><div class="empty">برای نمایش، جستجو را بزنید</div></div>
+    <div id="hist-rows" style="margin-top:12px"><div class="empty">در حال بارگذاری…</div></div>
   </div>`;
+  searchHistory().catch(()=>{});
 }
 async function searchHistory(){
   if(!current) return;
@@ -691,7 +726,10 @@ async function searchHistory(){
         <tr><th>شماره سشن</th><th>سیستم</th><th>شروع</th><th>پایان</th><th>مدت</th><th>کاربر</th><th>وضعیت</th><th>بازی</th><th>بوفه</th><th>جمع</th></tr>
         ${rows || '<tr><td colspan="10" class="empty">سشنی یافت نشد</td></tr>'}
       </table></div>`;
-  }catch(e){ toast(e.message,'err'); }
+  }catch(e){
+    if(e.status===403){ $('s-history').innerHTML = licenseLockCard(); return; }
+    toast(e.message,'err');
+  }
 }
 
 /* — tariffs, holidays, buffet catalog — */
@@ -767,7 +805,11 @@ async function loadPricing(){
         <button class="btn btn-primary btn-sm" onclick="addBuffetItem()">افزودن</button>
       </div>
     </div>`;
-  }catch(e){ $('s-pricing').innerHTML = `<div class="alert alert-error">${esc(e.message)}</div>`; }
+  }catch(e){
+    $('s-pricing').innerHTML = e.status===403
+      ? licenseLockCard()
+      : `<div class="alert alert-error">${esc(e.message)}</div>`;
+  }
 }
 
 async function addTariff(){
@@ -830,7 +872,7 @@ async function delBuffet(id){
 }
 
 Object.assign(window, {
-  show, loadSystems, renderSystems, refilter, startSys, pauseS, resumeS, stopS, clearReceipt,
+  show, loadSystems, renderSystems, refilter, licenseLockCard, loadStorage, startSys, pauseS, resumeS, stopS, clearReceipt,
   addBuffet, delLine, toggleAddSys, createSystem, editSys, setSysStatus, delSys,
   searchHistory, addTariff, delTariff, createSamples, addHoliday, delHoliday,
   addBuffetItem, delBuffet,
