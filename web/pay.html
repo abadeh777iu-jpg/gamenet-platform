@@ -19,12 +19,12 @@
   <!-- payment form -->
   <div id="pay-box" class="hidden">
     <div class="card" style="margin-top:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div class="pay-head">
         <div>
           <span class="badge badge-purple" id="o-id"></span>
           <h3 style="margin-top:8px" id="o-plan"></h3>
         </div>
-        <div style="text-align:left">
+        <div class="pay-amount">
           <div class="muted small">مبلغ قابل پرداخت</div>
           <div class="price" id="o-amount"></div>
         </div>
@@ -33,21 +33,21 @@
       <div class="grid g2" style="gap:12px">
         <div>
           <label>شماره کارت (برای انتقال)</label>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="copyrow">
             <input id="card-no" readonly dir="ltr" style="text-align:left;font-weight:700;flex:1">
             <button class="btn btn-secondary" type="button" onclick="copyEl('card-no',this)">📋 کپی</button>
           </div>
         </div>
         <div>
           <label>به نام</label>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="copyrow">
             <input id="card-name" readonly style="flex:1;font-weight:700">
             <button class="btn btn-secondary" type="button" onclick="copyEl('card-name',this)">📋 کپی</button>
           </div>
         </div>
         <div>
           <label>مبلغ دقیق (ریال)</label>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="copyrow">
             <input id="amount-raw" readonly dir="ltr" style="text-align:left;font-weight:700;flex:1">
             <button class="btn btn-secondary" type="button" onclick="copyEl('amount-raw',this)">📋 کپی</button>
           </div>

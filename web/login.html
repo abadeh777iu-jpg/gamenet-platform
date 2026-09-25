@@ -68,7 +68,7 @@ API.get('/api/auth/me').then(u=>{ if(u) location.href='/app/'; }).catch(()=>{});
           }catch(e){ show(e.message); }
         }
       });
-      google.accounts.id.renderButton(box, { theme:'outline', size:'large', text:'continue_with', locale:'fa', shape:'rectangular', width: 280 });
+      google.accounts.id.renderButton(box, { theme:'outline', size:'large', text:'continue_with', locale:'fa', shape:'rectangular', width: Math.max(200, Math.min(280, box.clientWidth || 280)) });
     }catch(e){ box.innerHTML = '<span class="muted" style="font-size:12px">خطا در بارگذاری ورود گوگل — صفحه را تازه‌سازی کنید</span>'; }
   };
   s.onerror = function(){ box.innerHTML = '<span class="muted" style="font-size:12px">عدم دسترسی به سرویس گوگل — از رمز عبور استفاده کنید</span>'; };

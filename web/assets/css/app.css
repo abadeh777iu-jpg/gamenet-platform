@@ -5,6 +5,7 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
   font-family: Vazirmatn, Tahoma, system-ui, sans-serif;
   background:
@@ -12,15 +13,22 @@ body{
     radial-gradient(800px 400px at 0% 110%, rgba(139,92,246,.12), transparent 50%),
     var(--bg);
   color:var(--text); min-height:100vh; line-height:1.6;
+  overflow-x:clip; /* safety: never allow sideways page scroll */
+  -webkit-tap-highlight-color:rgba(52,211,153,.22);
 }
+img{max-width:100%;height:auto}
 a{color:var(--accent); text-decoration:none}
 a:hover{text-decoration:underline}
-.container{max-width:1100px;margin:0 auto;padding:24px 16px}
+.container{max-width:1100px;margin:0 auto;padding:24px 16px;
+  padding-left:calc(16px + env(safe-area-inset-left,0px));
+  padding-right:calc(16px + env(safe-area-inset-right,0px));
+}
 .narrow{max-width:560px}
 .card{
   background:linear-gradient(160deg, rgba(17,26,46,.95), rgba(14,22,40,.92));
   border:1px solid var(--line); border-radius:var(--radius); padding:22px;
   box-shadow:var(--shadow);
+  overflow-wrap:break-word;
 }
 .grid{display:grid; gap:14px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
@@ -33,6 +41,7 @@ h1,h2,h3{margin:0 0 10px; line-height:1.3}
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   border:1px solid transparent;border-radius:12px;padding:10px 16px;font-weight:700;
   cursor:pointer;font-size:14px;transition:.15s;font-family:inherit;
+  flex-shrink:0; /* inside flex rows: inputs shrink, buttons keep tap size */
 }
 .btn:active{transform:scale(.98)}
 .btn-primary{background:linear-gradient(135deg,#059669,#34d399);color:#042f1e}
@@ -46,6 +55,7 @@ h1,h2,h3{margin:0 0 10px; line-height:1.3}
 input,select,textarea{
   width:100%;background:#0a1324;border:1px solid var(--line);border-radius:12px;
   padding:11px 14px;color:var(--text);font-size:14px;outline:none;font-family:inherit;
+  min-width:0; /* flex rows: allow shrinking instead of overflowing on phones */
 }
 input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(52,211,153,.18)}
 label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;font-weight:700}
@@ -53,7 +63,10 @@ label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;font-wei
   position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);
   background:rgba(11,18,32,.8);border-bottom:1px solid var(--line);
 }
-.nav-inner{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.nav-inner{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;row-gap:8px;
+  padding-left:calc(16px + env(safe-area-inset-left,0px));
+  padding-right:calc(16px + env(safe-area-inset-right,0px));
+}
 .brand{font-weight:900;font-size:18px;color:#fff;display:flex;align-items:center;gap:8px}
 .brand span{background:linear-gradient(135deg,#34d399,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent}
 .nav .spacer{flex:1}
@@ -66,7 +79,7 @@ label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;font-wei
 .badge-blue{background:rgba(56,189,248,.12);color:#7dd3fc;border-color:rgba(56,189,248,.35)}
 .badge-purple{background:rgba(139,92,246,.12);color:#c4b5fd;border-color:rgba(139,92,246,.35)}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:10px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th,td{padding:10px 8px;text-align:right;border-bottom:1px solid var(--line);overflow-wrap:break-word}
 th{color:var(--muted);font-size:11px}
 tr:hover td{background:rgba(148,163,184,.04)}
 .alert{border-radius:12px;padding:12px 14px;font-size:13px;margin:10px 0;border:1px solid var(--line)}
@@ -75,7 +88,7 @@ tr:hover td{background:rgba(148,163,184,.04)}
 .alert-info{background:rgba(56,189,248,.1);border-color:rgba(56,189,248,.35);color:#bae6fd}
 .alert:empty{display:none}
 .stat{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
-.stat .v{font-size:22px;font-weight:900;margin-top:4px}
+.stat .v{font-size:22px;font-weight:900;margin-top:4px;overflow-wrap:anywhere}
 .stat .l{font-size:11px;color:var(--muted)}
 .hero{padding:70px 16px;text-align:center}
 .hero h1{font-size:clamp(28px,5vw,44px);margin-bottom:12px}
@@ -86,8 +99,8 @@ tr:hover td{background:rgba(148,163,184,.04)}
 .tab{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(148,163,184,.06);cursor:pointer;font-size:13px;font-weight:700;color:var(--muted)}
 .tab.active{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.4);color:#6ee7b7}
 .hidden{display:none !important}
-.chat-box{height:320px;overflow:auto;background:#0a1324;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
-.msg{max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;white-space:pre-wrap}
+.chat-box{height:clamp(240px,55vh,360px);overflow:auto;background:#0a1324;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.user{align-self:flex-start;background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.3)}
 .msg.assistant,.msg.agent{align-self:flex-end;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3)}
 .msg.system{align-self:center;background:rgba(148,163,184,.1);font-size:11px;color:var(--muted)}
@@ -97,7 +110,7 @@ tr:hover td{background:rgba(148,163,184,.04)}
 .progress>i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#8b5cf6);border-radius:99px}
 .kbd{background:#0a1324;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:11px}
 .layout{display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start}
-@media (max-width:800px){.layout{grid-template-columns:1fr}}
+.layout>*{min-width:0} /* grid children must be allowed to shrink (scroll inside) */
 .side{position:sticky;top:70px}
 .side button{
   width:100%;text-align:right;background:transparent;border:1px solid transparent;color:var(--muted);
@@ -106,3 +119,107 @@ tr:hover td{background:rgba(148,163,184,.04)}
 .side button:hover{background:rgba(148,163,184,.08);color:#fff}
 .side button.active{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.35);color:#6ee7b7}
 .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+/* copy-row (pay page): input + copy button stay on one line, shrink gracefully */
+.copyrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.copyrow input{min-width:0;flex:1}
+/* pay page header: order info + amount */
+.pay-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.pay-amount{text-align:left}
+/* admin login gate offset (media queries below adjust it) */
+#admin-gate{margin-top:70px}
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — every device, from 320px phones to wide desktops
+   ══════════════════════════════════════════════════════════ */
+
+/* sidebars become a horizontally scrollable tab strip on tablets/phones */
+@media (max-width:800px){
+  .layout{grid-template-columns:1fr;gap:12px}
+  .side{
+    position:static;display:flex;gap:6px;overflow-x:auto;
+    padding:2px 2px 8px;margin:-2px -4px 0;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  }
+  .side::-webkit-scrollbar{display:none}
+  .side button{
+    width:auto;flex:0 0 auto;white-space:nowrap;margin:0;
+    padding:9px 14px;background:rgba(148,163,184,.06);border:1px solid var(--line);
+  }
+  .side button:hover{background:rgba(148,163,184,.1)}
+}
+
+/* grids collapse to a single comfortable column */
+@media (max-width:560px){
+  .g2,.g3,.g4{grid-template-columns:1fr}
+}
+
+/* phones */
+@media (max-width:640px){
+  .container{padding-top:16px;padding-bottom:16px;
+    padding-left:calc(12px + env(safe-area-inset-left,0px));
+    padding-right:calc(12px + env(safe-area-inset-right,0px));
+  }
+  .nav-inner{padding-top:10px;padding-bottom:10px;gap:10px;
+    padding-left:calc(12px + env(safe-area-inset-left,0px));
+    padding-right:calc(12px + env(safe-area-inset-right,0px));
+  }
+  .brand{font-size:15.5px}
+  .nav a{font-size:12.5px}
+  .card{padding:16px}
+  .hero{padding:44px 12px}
+  .hero p{font-size:14px}
+  h1{font-size:clamp(22px,7vw,28px)}
+  .price{font-size:24px}
+  .stat{padding:13px}
+  .stat .v{font-size:19px}
+  .footer{margin-top:28px;padding:22px 12px}
+  .empty{padding:20px 12px}
+  /* iOS zooms pages when focusing inputs smaller than 16px — keep 16px */
+  input,select,textarea{font-size:16px;padding:11px 12px}
+  /* tables: size to their content and scroll horizontally inside their card
+     instead of crushing columns or breaking the page */
+  table{width:max-content;min-width:100%;font-size:12.5px}
+  th,td{padding:9px 6px}
+  /* payment page header stacks, amount centered */
+  .pay-head{flex-direction:column;align-items:stretch}
+  .pay-amount{text-align:center}
+  /* admin login top offset */
+  #admin-gate{margin-top:36px}
+}
+
+/* very small phones (iPhone SE / 320px) */
+@media (max-width:360px){
+  .container{padding-left:calc(10px + env(safe-area-inset-left,0px));padding-right:calc(10px + env(safe-area-inset-right,0px))}
+  .card{padding:14px}
+  .brand{font-size:14px}
+  .btn{padding:10px 13px;font-size:13.5px}
+}
+
+/* touch devices: bigger tap targets */
+@media (pointer:coarse){
+  .btn{min-height:42px}
+  .btn-sm{min-height:36px}
+  .side button{min-height:44px}
+  .tab{min-height:40px;display:inline-flex;align-items:center}
+}
+
+/* landscape phones / short screens: tighter hero, shorter chat */
+@media (max-height:560px){
+  .hero{padding:34px 14px}
+  .chat-box{height:230px}
+  #admin-gate{margin-top:24px}
+}
+
+/* inline flex rows (buttons/inputs side by side) wrap instead of overflowing */
+.card div[style*="display:flex"]:not([style*="flex-wrap"]){flex-wrap:wrap;row-gap:8px}
+
+/* accessibility: honor reduced-motion */
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important}
+  .btn:active{transform:none}
+}
+
+/* fine pointers only: hover effects shouldn't stick on touch */
+@media (hover:none){
+  tr:hover td{background:transparent}
+}
