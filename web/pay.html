@@ -41,27 +41,27 @@
         <div>
           <label>شماره کارت (برای انتقال)</label>
           <div class="copyrow">
-            <input id="card-no" readonly dir="ltr" style="text-align:left;font-weight:700;flex:1">
+            <input id="card-no" aria-label="شماره کارت" readonly dir="ltr" style="text-align:left;font-weight:700;flex:1">
             <button class="btn btn-secondary" type="button" onclick="copyEl('card-no',this)">📋 کپی</button>
           </div>
         </div>
         <div>
           <label>به نام</label>
           <div class="copyrow">
-            <input id="card-name" readonly style="flex:1;font-weight:700">
+            <input id="card-name" aria-label="به نام" readonly style="flex:1;font-weight:700">
             <button class="btn btn-secondary" type="button" onclick="copyEl('card-name',this)">📋 کپی</button>
           </div>
         </div>
         <div>
           <label>مبلغ دقیق (ریال)</label>
           <div class="copyrow">
-            <input id="amount-raw" readonly dir="ltr" style="text-align:left;font-weight:700;flex:1">
+            <input id="amount-raw" aria-label="مبلغ" readonly dir="ltr" style="text-align:left;font-weight:700;flex:1">
             <button class="btn btn-secondary" type="button" onclick="copyEl('amount-raw',this)">📋 کپی</button>
           </div>
         </div>
         <div>
           <label>بانک</label>
-          <input id="card-bank" readonly>
+          <input id="card-bank" aria-label="بانک" readonly>
         </div>
       </div>
       <div id="card-warn" class="alert alert-error hidden" style="margin-top:12px">
@@ -81,11 +81,11 @@
       <div class="grid g2" style="margin-top:12px;gap:12px">
         <div>
           <label>شماره پیگیری انتقال <span style="color:#e11d48">*</span></label>
-          <input id="trk" inputmode="numeric" autocomplete="off" placeholder="مثلاً 12345678901234567890" maxlength="40">
+          <input id="trk" aria-label="کد پیگیری بانک" inputmode="numeric" autocomplete="off" placeholder="مثلاً 12345678901234567890" maxlength="40">
         </div>
         <div>
           <label>عکس رسید (اختیاری)</label>
-          <input id="receipt" type="file" accept="image/jpeg,image/png,image/webp">
+          <input id="receipt" aria-label="رسید پرداخت" type="file" accept="image/jpeg,image/png,image/webp">
           <div id="receipt-prev" class="muted small" style="margin-top:6px"></div>
         </div>
       </div>
@@ -102,8 +102,8 @@
       <h3>رسید شما ثبت شد — در انتظار تأیید مدیر</h3>
       <p class="muted">معمولاً ظرف کمی بررسی می‌شود. این صفحه را نبندید؛ به‌صورت خودکار وضعیت بررسی می‌شود.</p>
       <div class="grid g2" style="text-align:right;gap:10px">
-        <div><label>سفارش</label><input id="p-id" readonly></div>
-        <div><label>کد پیگیری ثبت‌شده</label><input id="p-trk" readonly dir="ltr" style="text-align:left"></div>
+        <div><label for="p-id">سفارش</label><input id="p-id" readonly></div>
+        <div><label for="p-trk">کد پیگیری ثبت‌شده</label><input id="p-trk" readonly dir="ltr" style="text-align:left"></div>
       </div>
       <div style="margin-top:14px"><span class="badge badge-amber">در انتظار تأیید</span></div>
       <button class="btn btn-secondary" style="margin-top:16px" onclick="load(true)">بررسی دستی وضعیت</button>
