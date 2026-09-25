@@ -21,6 +21,7 @@ function adErr(msg){
 }
 function enterPanel(u){
   user = u;
+  meId = u.id || null;
   $('admin-nav').style.display = '';
   $('admin-gate').classList.add('hidden');
   $('panel').classList.remove('hidden');
@@ -50,6 +51,11 @@ async function adLogin(){
 }
 window.adLogin = adLogin;
 
+let usersTab = 'active';
+let meId = null;
+const USER_STATUS_FA = { active:'فعال', suspended:'غیرفعال', deleted:'حذف‌شده' };
+function setUsersTab(t){ usersTab = t; loaders.users(); }
+
 const loaders = {
   async stats(){
     const d = await API.get('/api/admin/stats');
@@ -66,20 +72,38 @@ const loaders = {
       </div>`;
   },
   async users(){
-    const d = await API.get('/api/admin/users');
-    $('s-users').innerHTML = `<div class="card"><h3>کاربران</h3><div style="overflow:auto"><table>
+    const d = await API.get('/api/admin/users?status='+encodeURIComponent(usersTab));
+    const c = d.counts || { active:0, suspended:0, deleted:0 };
+    const tabBtn = (k,label)=>`<button class="btn btn-sm ${usersTab===k?'btn-primary':'btn-secondary'}" onclick="setUsersTab('${k}')">${label} (${c[k]||0})</button>`;
+    $('s-users').innerHTML = `<div class="card"><h3>کاربران</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        ${tabBtn('active','فعال')}${tabBtn('suspended','غیرفعال')}${tabBtn('deleted','حذف‌شده')}
+      </div>
+      <div style="overflow:auto"><table>
       <tr><th>#</th><th>ایمیل</th><th>نام</th><th>نقش‌ها</th><th>وضعیت</th><th>ایمیل</th><th>عملیات</th></tr>
-      ${d.users.map(u=>`<tr>
+      ${d.users.map(u=>{
+        const isMe = meId !== null && u.id === meId;
+        const badge = u.status==='active'?'badge-green':u.status==='suspended'?'badge-amber':'badge-red';
+        let actions = '';
+        if(isMe){
+          actions = '<span class="badge badge-purple">حساب شما</span>';
+        } else if(u.status==='active'){
+          actions = `<button class="btn btn-secondary btn-sm" onclick="uStatus(${u.id},'suspended')">غیرفعال</button>
+            <button class="btn btn-danger btn-sm" onclick="uStatus(${u.id},'deleted')">حذف</button>`;
+        } else if(u.status==='suspended'){
+          actions = `<button class="btn btn-primary btn-sm" onclick="uStatus(${u.id},'active')">فعال</button>
+            <button class="btn btn-danger btn-sm" onclick="uStatus(${u.id},'deleted')">حذف</button>`;
+        } else {
+          actions = `<button class="btn btn-primary btn-sm" onclick="uStatus(${u.id},'active')">بازگردانی</button>`;
+        }
+        if(!isMe && !u.email_verified_at) actions += ` <button class="btn btn-secondary btn-sm" onclick="uVerify(${u.id})">تأیید ایمیل</button>`;
+        return `<tr>
         <td>${u.id}</td><td>${esc(u.email)}</td><td>${esc(u.name)}</td>
         <td><span class="badge badge-purple">${esc(u.roles||'—')}</span></td>
-        <td><span class="badge ${u.status==='active'?'badge-green':'badge-red'}">${esc(u.status)}</span></td>
+        <td><span class="badge ${badge}">${USER_STATUS_FA[u.status]||esc(u.status)}</span></td>
         <td>${u.email_verified_at ? '<span class="badge badge-green">تأیید</span>' : '<span class="badge badge-amber">در انتظار</span>'}</td>
-        <td>
-          ${u.status==='active'
-            ? `<button class="btn btn-danger btn-sm" onclick="uStatus(${u.id},'suspended')">تعلیق</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="uStatus(${u.id},'active')">فعال</button>`}
-          ${u.email_verified_at ? '' : ` <button class="btn btn-secondary btn-sm" onclick="uVerify(${u.id})">تأیید ایمیل</button>`}
-        </td></tr>`).join('')}
+        <td>${actions}</td></tr>`;
+      }).join('')||'<tr><td colspan="7" class="empty">موردی نیست</td></tr>'}
     </table></div></div>`;
   },
   async gamenets(){
@@ -315,7 +339,10 @@ const loaders = {
 };
 
 async function uStatus(id,status){
-  if(!confirm('وضعیت کاربر '+id+' → '+status+'؟')) return;
+  const how = status==='deleted' ? 'حذف شود؟ (حذف نرم است — داده‌ها می‌ماند و بعداً قابل بازگردانی)'
+    : status==='suspended' ? 'غیرفعال شود؟ (از سیستم خارج می‌شود تا دوباره فعالش کنید)'
+    : 'دوباره فعال شود؟';
+  if(!confirm('کاربر '+id+' '+how)) return;
   try{ await API.post('/api/admin/users/'+id+'/status',{status}); toast('انجام شد'); loaders.users(); }
   catch(e){ toast(e.message,'err'); }
 }
@@ -432,7 +459,7 @@ async function evIssue(id){
     loaders.events(); loaders.licenses();
   }catch(e){ toast(e.message,'err'); }
 }
-Object.assign(window,{uStatus,gStatus,subAct,licSet,createBackup,pruneBackup,recalc,saveSetting,saveCard,confirmPay,rejectPay,uVerify,openTicketAdmin,replyAdm,evCreate,evToggle,evIssue});
+Object.assign(window,{uStatus,gStatus,subAct,licSet,createBackup,pruneBackup,recalc,saveSetting,saveCard,confirmPay,rejectPay,uVerify,openTicketAdmin,replyAdm,evCreate,evToggle,evIssue,setUsersTab});
 
 (async()=>{
   // Dedicated admin gate: NO redirect to the customer /login page.

@@ -31,12 +31,20 @@ router.get('/stats', (req,res)=>{
   });
 });
 
+const USER_STATUSES = ['active','suspended','deleted'];
+
 router.get('/users', (req,res)=>{
+  const status = (req.query.status || 'active');
+  if(!USER_STATUSES.includes(status)) return res.status(400).json({ error:'bad_status', message:'دسته نامعتبر است' });
   const rows = db.prepare(`
     SELECT u.id,u.email,u.name,u.status,u.email_verified_at,u.created_at,
       (SELECT GROUP_CONCAT(role_code) FROM user_roles WHERE user_id=u.id) roles
-    FROM users u ORDER BY u.id DESC LIMIT 200`).all();
-  res.json({ users: rows });
+    FROM users u WHERE u.status=? ORDER BY u.id DESC LIMIT 500`).all(status);
+  const counts = { active:0, suspended:0, deleted:0 };
+  for(const r of db.prepare(`SELECT status, COUNT(*) c FROM users GROUP BY status`).all()){
+    if(r.status in counts) counts[r.status] = r.c;
+  }
+  res.json({ users: rows, counts, tab: status });
 });
 
 router.post('/users/:id/role', requireRole('super_admin'), asyncHandler(async (req,res)=>{
@@ -56,13 +64,17 @@ router.post('/users/:id/role', requireRole('super_admin'), asyncHandler(async (r
 
 router.post('/users/:id/status', requireRole('super_admin'), asyncHandler(async (req,res)=>{
   const { status } = req.body || {};
-  if(!['active','suspended'].includes(status)) return res.status(400).json({ error:'bad_status' });
-  db.prepare('UPDATE users SET status=? WHERE id=?').run(status, Number(req.params.id));
-  if(status === 'suspended'){
-    db.prepare(`UPDATE auth_sessions SET revoked_at=datetime('now') WHERE user_id=?`).run(Number(req.params.id));
+  if(!USER_STATUSES.includes(status)) return res.status(400).json({ error:'bad_status', message:'وضعیت نامعتبر است' });
+  const uid = Number(req.params.id);
+  if(uid === req.user.id) return res.status(400).json({ error:'cannot_change_self', message:'نمی‌توانید وضعیت حساب خودتان را تغییر دهید' });
+  const user = db.prepare('SELECT id, status FROM users WHERE id=?').get(uid);
+  if(!user) return res.status(404).json({ error:'not_found', message:'کاربر پیدا نشد' });
+  db.prepare('UPDATE users SET status=?, updated_at=datetime(\'now\') WHERE id=?').run(status, uid);
+  if(status !== 'active'){
+    db.prepare(`UPDATE auth_sessions SET revoked_at=datetime('now') WHERE user_id=?`).run(uid);
   }
-  require('../services/audit').audit({ actorUserId:req.user.id, actorRole:req.user.roles.join(','), action:'admin.user_status', entity:'user', entityId:req.params.id, meta:{ status }, ip:req.ip });
-  res.json({ ok:true });
+  require('../services/audit').audit({ actorUserId:req.user.id, actorRole:req.user.roles.join(','), action:'admin.user_status', entity:'user', entityId:uid, meta:{ from:user.status, to:status }, ip:req.ip });
+  res.json({ ok:true, status });
 }));
 
 router.get('/gamenets', (req,res)=>{
