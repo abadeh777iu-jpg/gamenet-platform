@@ -1,0 +1,14 @@
+{
+  "name": "GameNet Platform — مدیریت حرفه‌ای گیم‌نت",
+  "short_name": "GameNet",
+  "description": "سامانه مدیریت گیم‌نت: زمان بازی، تعرفه، بوفه، فاکتور و گزارش فروش",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "lang": "fa",
+  "dir": "rtl",
+  "icons": [
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
