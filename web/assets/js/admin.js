@@ -10,8 +10,45 @@ document.querySelectorAll('.side button').forEach(b=>{
     loaders[b.dataset.s]();
   };
 });
-async function logout(){ await API.post('/api/auth/logout',{}); location.href='/'; }
+async function logout(){ await API.post('/api/auth/logout',{}).catch(()=>{}); location.href='/admin'; }
 window.logout=logout;
+
+function adErr(msg){
+  const e = $('ad-err');
+  if(!e) return;
+  e.textContent = msg || '';
+  e.classList.toggle('hidden', !msg);
+}
+function enterPanel(u){
+  user = u;
+  $('admin-nav').style.display = '';
+  $('admin-gate').classList.add('hidden');
+  $('panel').classList.remove('hidden');
+  $('who').textContent = u.email;
+  loaders.stats();
+}
+async function adLogin(){
+  adErr('');
+  const btn = $('ad-btn'); btn.disabled = true; btn.classList.add('loading');
+  try{
+    const email = $('ad-email').value.trim(), password = $('ad-pass').value;
+    if(!email || !password){ adErr('ایمیل و رمز را وارد کنید'); return; }
+    const r = await API.post('/api/auth/login', { email, password });
+    const roles = (r.user && r.user.roles) || [];
+    if(!roles.some(x => x === 'super_admin' || x === 'admin')){
+      adErr('این حساب دسترسی مدیریت ندارد');
+      await API.post('/api/auth/logout', {}).catch(()=>{});
+      return;
+    }
+    enterPanel(r.user);
+    toast('خوش آمدید');
+  }catch(e){
+    adErr(e.message);
+  }finally{
+    btn.disabled = false; btn.classList.remove('loading');
+  }
+}
+window.adLogin = adLogin;
 
 const loaders = {
   async stats(){
@@ -324,8 +361,27 @@ async function replyAdm(id,resolve){
 Object.assign(window,{uStatus,gStatus,subAct,licSet,createBackup,pruneBackup,recalc,saveSetting,saveCard,confirmPay,rejectPay,uVerify,openTicketAdmin,replyAdm});
 
 (async()=>{
-  user = await requireAuth(['super_admin','admin']);
-  if(!user) return;
-  $('who').textContent = user.email;
-  await loaders.stats();
-})().catch(e=>toast(e.message,'err'));
+  // Dedicated admin gate: NO redirect to the customer /login page.
+  const gateForm = document.getElementById('ad-form');
+  if(gateForm) gateForm.addEventListener('submit', e=>{ e.preventDefault(); adLogin(); });
+  const u = await API.me();
+  if(!u){ return; } // gate (login card) stays visible
+  const roles = u.roles || [];
+  if(!roles.some(r => r === 'super_admin' || r === 'admin')){
+    document.getElementById('gate-box').innerHTML = `
+      <div style="text-align:center;font-size:40px">🚫</div>
+      <h3 style="text-align:center">دسترسی ندارید</h3>
+      <p class="muted" style="text-align:center">این حساب، مدیر نیست. فقط حساب مدیر می‌تواند وارد شود.</p>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:14px">
+        <button class="btn btn-secondary" onclick="logout()">خروج از حساب</button>
+        <a class="btn btn-primary" href="/">بازگشت به سایت</a>
+      </div>`;
+    document.getElementById('admin-nav').style.display = '';
+    $('who').textContent = u.email;
+    return;
+  }
+  enterPanel(u);
+})().catch(e=>{
+  const el = document.getElementById('ad-err');
+  if(el){ el.textContent = e.message; el.classList.remove('hidden'); }
+});

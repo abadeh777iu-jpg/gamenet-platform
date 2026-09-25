@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const { db } = require('../db');
-const { requireAuth, requireEmailVerified } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { requireTenant, requireTenantOwner, isAdmin } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { createOrder, markPending, mockPay, paymentConfig, submitManualPayment } = require('../services/payment');
@@ -14,7 +14,9 @@ const router = express.Router();
 router.use(requireAuth);
 
 /** Create order (idempotent via Idempotency-Key header) */
-router.post('/orders', requireEmailVerified, rateLimit({ max: 30 }), asyncHandler(async (req,res)=>{
+// Email-verification gate removed by owner request — purchases must never
+// depend on mail delivery (no SMTP provider is configured).
+router.post('/orders', rateLimit({ max: 30 }), asyncHandler(async (req,res)=>{
   const { gamenet_id, plan_id } = req.body || {};
   const idem = req.get('idempotency-key') || null;
   if(!gamenet_id || !plan_id) return res.status(400).json({ error:'missing_fields' });

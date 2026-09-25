@@ -2,7 +2,8 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>پنل مدیریت اصلی — GameNet Platform</title>
+<meta name="robots" content="noindex,nofollow">
+<title>ورود مدیریت — GameNet Platform</title>
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/css/app.css">
 </head>
@@ -10,11 +11,32 @@
 <nav class="nav"><div class="nav-inner">
   <a class="brand" href="/">👑 <span>پنل مدیریت اصلی</span></a>
   <div class="spacer"></div>
-  <span id="who" class="muted small"></span>
-  <a href="/app/" class="btn btn-ghost btn-sm">پنل گیم‌نت</a>
-  <button class="btn btn-danger btn-sm" onclick="logout()">خروج</button>
+  <span id="admin-nav" style="display:none">
+    <span id="who" class="muted small"></span>
+    <button class="btn btn-danger btn-sm" onclick="logout()">خروج</button>
+  </span>
 </div></nav>
-<div class="container layout">
+
+<!-- ═══ ورود مدیر (فقط ایمیل و رمز — بدون هیچ دکمهٔ مشتری) ═══ -->
+<div id="admin-gate" class="container" style="max-width:430px;margin-top:70px">
+  <div class="card" id="gate-box">
+    <div style="text-align:center;font-size:40px">🔐</div>
+    <h3 style="text-align:center;margin-top:6px">ورود پنل مدیریت</h3>
+    <p class="muted small" style="text-align:center">این بخش فقط برای مدیر سایت است.</p>
+    <div id="ad-err" class="alert alert-error hidden" style="margin-top:10px"></div>
+    <form id="ad-form" autocomplete="on">
+      <label>ایمیل مدیریت</label>
+      <input id="ad-email" type="email" autocomplete="username" dir="ltr" style="text-align:left" placeholder="admin@...">
+      <label>رمز عبور</label>
+      <input id="ad-pass" type="password" autocomplete="current-password" placeholder="••••••••">
+      <button id="ad-btn" class="btn btn-primary" type="submit" style="width:100%;margin-top:16px">ورود مدیریت</button>
+    </form>
+    <p class="muted small" style="text-align:center;margin-top:14px"><a href="/">بازگشت به سایت</a></p>
+  </div>
+</div>
+
+<!-- ═══ پنل مدیر (بعد از ورود نمایان می‌شود) ═══ -->
+<div id="panel" class="container layout hidden">
   <aside class="side">
     <button data-s="stats" class="active">آمار کلی</button>
     <button data-s="users">کاربران</button>
