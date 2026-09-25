@@ -5,7 +5,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       try {
-        return await handleApi(request, env);
+        return await handleApi(request, env, ctx);
       } catch (e) {
         console.error('api error', e && e.stack || e);
         return new Response(JSON.stringify({

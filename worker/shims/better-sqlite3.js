@@ -70,8 +70,13 @@ async function __initSqlJs(kvGet, kvPut, force){
     persistHook = async () => {
       if(!kvPut || !dirty) return;
       const data = sqlDb.export();
-      dirty = false;
-      await kvPut('db:snapshot', b64encode(data));
+      try{
+        await kvPut('db:snapshot', b64encode(data));
+        dirty = false; // only clear after the snapshot is durably stored
+      }catch(e){
+        dirty = true; // keep dirty so the next flush retries — never lose writes
+        throw e;
+      }
     };
     return true;
   })();

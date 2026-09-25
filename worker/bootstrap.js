@@ -9,12 +9,18 @@ const { expressHandler } = require('./express-fetch');
 let ready = null;
 let app = null;
 let loadedVer = null;
+let lastVerCheck = 0;
 
 async function init(env){
   const hasKv = !!(env && env.DB);
   let ver = null;
   if(hasKv){
+    // Version probe is only needed to notice writes from *other* isolates.
+    // KV is eventually consistent anyway — a 2s bound is safe and saves a
+    // round-trip on every request.
+    if(ready && Date.now() - lastVerCheck < 2000) return ready;
     try{ ver = await env.DB.get('db:version', 'text'); }catch(e){ ver = null; }
+    lastVerCheck = Date.now();
   }
   if(ready && ver === loadedVer) return ready;
 
@@ -48,20 +54,63 @@ async function init(env){
   return ready;
 }
 
-async function handleApi(request, env){
+async function handleApi(request, env, ctx){
   await init(env);
   const res = await expressHandler(app, request, env);
   if(!['GET','HEAD'].includes(request.method)){
-    try{
-      await Database.__flush();
-      if(hasKvPut(env)){
-        const nv = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
-        await env.DB.put('db:version', nv);
-        loadedVer = nv;
-      }
-    }catch(e){ console.error('flush', e); }
+    // Persist outside the critical path: the in-memory DB is already updated,
+    // so the client does not wait for the KV snapshot round-trip.
+    const p = persistCoalesced(env);
+    if(ctx && typeof ctx.waitUntil === 'function'){
+      ctx.waitUntil(p.catch(e => console.error('flush(bg)', e)));
+    } else {
+      try{ await p; }catch(e){ console.error('flush', e); }
+    }
   }
   return res;
+}
+
+// Single-flight persistence: concurrent mutations share one export+put,
+// with a trailing re-run if writes arrive mid-flush, and KV 429 retries.
+let flushInflight = null;
+let flushRerun = false;
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function kvPutRetry(fn, tries){
+  let lastErr = null;
+  for(let i = 0; i < (tries || 4); i++){
+    try{ return await fn(); }
+    catch(e){ lastErr = e; await sleep(250 * (i + 1)); }
+  }
+  throw lastErr;
+}
+
+async function persistOnce(env){
+  await Database.__flush();
+  if(hasKvPut(env)){
+    const nv = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
+    await kvPutRetry(() => env.DB.put('db:version', nv), 4);
+    loadedVer = nv;
+  }
+}
+
+function persistCoalesced(env){
+  if(flushInflight){
+    flushRerun = true;
+    return flushInflight;
+  }
+  flushInflight = (async () => {
+    try{
+      do {
+        flushRerun = false;
+        await persistOnce(env);
+      } while(flushRerun);
+    } finally {
+      flushInflight = null;
+    }
+  })();
+  return flushInflight;
 }
 
 function hasKvPut(env){ return !!(env && env.DB && typeof env.DB.put === 'function'); }
