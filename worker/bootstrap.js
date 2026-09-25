@@ -34,7 +34,7 @@ async function init(env){
     const kvGet = hasKv ? (async (k) => env.DB.get(k, 'arrayBuffer')) : null;
     const kvPut = hasKv ? (async (k, v) => kvPutRetry(() => env.DB.put(k, v), 4)) : null;
     const force = loadedVer !== null && ver !== loadedVer;
-    await Database.__initSqlJs(kvGet, kvPut, force);
+    await Database.__initSqlJs(kvGet, kvPut, force, ver);
 
     const { migrate } = require('../src/db/migrate');
     try{ migrate(); }catch(e){ console.error('migrate', e); }
@@ -77,12 +77,16 @@ async function kvPutRetry(fn, tries){
 }
 
 async function persistOnce(env){
-  await Database.__flush();
-  if(hasKvPut(env)){
-    const nv = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
-    await kvPutRetry(() => env.DB.put('db:version', nv), 4);
-    loadedVer = nv;
-  }
+  if(!hasKvPut(env)){ await Database.__flush(); return; }
+  const nv = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
+  // Snapshot (version embedded) and the cheap probe key go out in parallel:
+  // one KV round-trip instead of two. Readers that see the new probe before the
+  // snapshot briefly retry (handled in the shim), so ordering stays safe.
+  await Promise.all([
+    Database.__flush(nv),
+    kvPutRetry(() => env.DB.put('db:version', nv), 4),
+  ]);
+  loadedVer = nv;
 }
 
 function persistCoalesced(env){
