@@ -56,9 +56,21 @@ async function __initSqlJs(kvGet, kvPut, force){
     if(!SQL) SQL = await initSqlJs({});
     let bytes = null;
     if(kvGet){
-      const b64 = await kvGet('db:snapshot');
-      if(b64){
-        try{ bytes = b64decode(b64); }catch(e){ bytes = null; }
+      const raw = await kvGet('db:snapshot');
+      if(raw){
+        try{
+          if(typeof raw === 'string'){
+            bytes = b64decode(raw); // legacy base64 snapshots
+          } else {
+            const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+            // 'SQLite format 3\0' header → binary snapshot; otherwise legacy base64 text
+            if(u8.length >= 16 && u8[0] === 0x53 && u8[1] === 0x51 && u8[2] === 0x4c && u8[3] === 0x69){
+              bytes = u8;
+            } else {
+              bytes = b64decode(typeof TextDecoder !== 'undefined' ? new TextDecoder().decode(u8) : String.fromCharCode.apply(null, u8));
+            }
+          }
+        }catch(e){ bytes = null; }
       }
     }
     if(sqlDb){
@@ -69,9 +81,9 @@ async function __initSqlJs(kvGet, kvPut, force){
     sqlDb.run('PRAGMA foreign_keys = ON;');
     persistHook = async () => {
       if(!kvPut || !dirty) return;
-      const data = sqlDb.export();
+      const data = sqlDb.export(); // Uint8Array — stored as binary KV value (no base64 tax)
       try{
-        await kvPut('db:snapshot', b64encode(data));
+        await kvPut('db:snapshot', data);
         dirty = false; // only clear after the snapshot is durably stored
       }catch(e){
         dirty = true; // keep dirty so the next flush retries — never lose writes

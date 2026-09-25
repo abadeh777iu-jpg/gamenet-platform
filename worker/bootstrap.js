@@ -9,18 +9,12 @@ const { expressHandler } = require('./express-fetch');
 let ready = null;
 let app = null;
 let loadedVer = null;
-let lastVerCheck = 0;
 
 async function init(env){
   const hasKv = !!(env && env.DB);
   let ver = null;
   if(hasKv){
-    // Version probe is only needed to notice writes from *other* isolates.
-    // KV is eventually consistent anyway — a 2s bound is safe and saves a
-    // round-trip on every request.
-    if(ready && Date.now() - lastVerCheck < 2000) return ready;
     try{ ver = await env.DB.get('db:version', 'text'); }catch(e){ ver = null; }
-    lastVerCheck = Date.now();
   }
   if(ready && ver === loadedVer) return ready;
 
@@ -37,8 +31,8 @@ async function init(env){
     if(env && env.RESEND_API_KEY) process.env.RESEND_API_KEY = env.RESEND_API_KEY;
     if(!process.env.APP_URL) process.env.APP_URL = 'https://gamenet-platform.pages.dev';
 
-    const kvGet = hasKv ? (async (k) => env.DB.get(k, 'text')) : null;
-    const kvPut = hasKv ? (async (k, v) => env.DB.put(k, v)) : null;
+    const kvGet = hasKv ? (async (k) => env.DB.get(k, 'arrayBuffer')) : null;
+    const kvPut = hasKv ? (async (k, v) => kvPutRetry(() => env.DB.put(k, v), 4)) : null;
     const force = loadedVer !== null && ver !== loadedVer;
     await Database.__initSqlJs(kvGet, kvPut, force);
 
@@ -58,14 +52,10 @@ async function handleApi(request, env, ctx){
   await init(env);
   const res = await expressHandler(app, request, env);
   if(!['GET','HEAD'].includes(request.method)){
-    // Persist outside the critical path: the in-memory DB is already updated,
-    // so the client does not wait for the KV snapshot round-trip.
-    const p = persistCoalesced(env);
-    if(ctx && typeof ctx.waitUntil === 'function'){
-      ctx.waitUntil(p.catch(e => console.error('flush(bg)', e)));
-    } else {
-      try{ await p; }catch(e){ console.error('flush', e); }
-    }
+    // Durability + read-your-writes across isolates: persist before the client
+    // sees the response (coalesced single-flight + KV 429 retries keep it fast).
+    try{ await persistCoalesced(env); }
+    catch(e){ console.error('flush', e); }
   }
   return res;
 }
