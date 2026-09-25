@@ -25,6 +25,8 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api', require('./routes/public'));
 app.use('/api/subscriptions', require('./routes/subscription'));
 app.use('/api/gamenets', require('./routes/gamenet'));
+// Play-session subsystem (live sessions, tariffs, buffet) — add-on for the gamenet panel
+app.use('/api/gamenets/:gamenetId/play', require('./routes/play'));
 app.use('/api/tickets', require('./routes/ticket'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/notifications', require('./routes/notification'));
